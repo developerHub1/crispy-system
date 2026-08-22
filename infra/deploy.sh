@@ -20,10 +20,25 @@ fi
 # Determine correct paths based on execution context
 if [ -f infra/docker-compose.yml ]; then
   COMPOSE_FILE="infra/docker-compose.yml"
+  TARGET_DATA="infra/data"
 else
   COMPOSE_FILE="docker-compose.yml"
+  TARGET_DATA="data"
+fi
+
+PERSISTENT_DATA="/home/runner/persistent/TetsifyMaps/infra/data"
+if [ -d "$PERSISTENT_DATA" ]; then
+  ABS_TARGET=$(readlink -f "$TARGET_DATA" 2>/dev/null || true)
+  ABS_PERSISTENT=$(readlink -f "$PERSISTENT_DATA" 2>/dev/null || true)
+  if [ "$ABS_TARGET" != "$ABS_PERSISTENT" ]; then
+    echo "Found persistent data at $PERSISTENT_DATA. Linking to $TARGET_DATA..."
+    rm -rf "$TARGET_DATA"
+    ln -s "$PERSISTENT_DATA" "$TARGET_DATA"
+  else
+    echo "Already running from the persistent directory. Skipping link creation."
+  fi
 fi
 
 echo "Deploying TetsifyMaps stack using Cloudflare Tunnel..."
 export TUNNEL_TOKEN="$CF_TOKEN"
-docker compose -f "$COMPOSE_FILE" up -d
+docker compose -f "$COMPOSE_FILE" up
