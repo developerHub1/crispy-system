@@ -14,7 +14,7 @@ interface MapStop {
 export default function MapDashboard() {
   // Connection states (initialized from env or standard defaults)
   const [tileUrl, setTileUrl] = useState(() => 
-    process.env.NEXT_PUBLIC_MAP_TILE_URL || "http://localhost:8080/styles/basic-preview/style.json"
+    process.env.NEXT_PUBLIC_MAP_TILE_URL || "http://localhost:8080/styles/basic/style.json"
   );
   const [geocodeUrl, setGeocodeUrl] = useState(() => 
     process.env.NEXT_PUBLIC_GEOCODE_URL || "http://localhost:2322"
@@ -88,8 +88,8 @@ export default function MapDashboard() {
         const map = new maplibre.Map({
           container: mapContainerRef.current!,
           style: tileUrl,
-          center: [73.8567, 18.5204], // Default: Pune, India
-          zoom: 12,
+          center: [76.0, 19.0], // Default: Maharashtra, India
+          zoom: 7,
         });
 
         // Add standard navigation controls
@@ -646,7 +646,7 @@ export default function MapDashboard() {
         {/* Dynamic connection indicator badge */}
         <div className="map-badge">
           <span className={`badge-dot ${connectionStatus !== "connected" ? "badge-dot-offline" : ""}`} />
-          TileServer: Basic Vector (Pune)
+          TileServer: Basic Vector (Maharashtra)
         </div>
       </section>
     </div>

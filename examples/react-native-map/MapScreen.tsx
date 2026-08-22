@@ -17,7 +17,7 @@ import { MapClient, TripResult } from "@tetsifymaps/core";
 // Since we are self-hosting, we don't need a Mapbox API token
 MapLibreGL.setAccessToken(null);
 
-const TILE_STYLE_URL = "https://tiles.testifysamples.com/styles/basic-preview/style.json";
+const TILE_STYLE_URL = "https://tiles.testifysamples.com/styles/basic/style.json";
 const ROUTING_URL = "https://routing.testifysamples.com";
 const GEOCODING_URL = "https://geocode.testifysamples.com";
 
@@ -114,7 +114,7 @@ export default function MapScreen() {
 
   // Add random stop near current location for routing demonstration
   const addDemoStop = () => {
-    const base = homeLocation || userLocation || [73.8567, 18.5204]; // Default Pune if no center
+    const base = homeLocation || userLocation || [76.0, 19.0]; // Default Maharashtra if no center
     
     // Offset stop slightly to simulate a destination (approx 500m - 2km)
     const randomOffsetLng = (Math.random() - 0.5) * 0.02;
@@ -203,8 +203,8 @@ export default function MapScreen() {
           {/* Camera Management */}
           <MapLibreGL.Camera
             ref={cameraRef}
-            zoomLevel={12}
-            centerCoordinate={[73.8567, 18.5204]} // Default center: Pune
+            zoomLevel={7}
+            centerCoordinate={[76.0, 19.0]} // Default center: Maharashtra
           />
 
           {/* User GPS Location tracking */}
