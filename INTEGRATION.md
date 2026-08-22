@@ -20,75 +20,51 @@ graph TD
     MerchantDashboard[Merchant Dashboard] -->|5. Geocode Addresses| Photon[Photon Geocoder - Port 2322]
 ```
 
----
-
 ## 2. API Endpoints Reference
 
-### A. Geocoding (Search & Locate)
-Use **Photon** to find coordinates of restaurants and customers during order checkout.
+All routing, tile serving, and geocoding services run **locally in your infrastructure**. There are **zero external dependencies** or third-party usage limits (no Google Maps or Mapbox billings).
 
-* **API Endpoint**: `https://geocode.testifysamples.com/api`
-* **Example Query**:
-  ```bash
-  curl "https://geocode.testifysamples.com/api?q=Hinjewadi+Phase+1+Pune"
-  ```
-* **Response Payload (GeoJSON)**:
-  ```json
-  {
-    "type": "FeatureCollection",
-    "features": [
-      {
-        "type": "Feature",
-        "geometry": {
-          "type": "Point",
-          "coordinates": [73.7384, 18.5912]
-        },
-        "properties": {
-          "name": "Hinjewadi Phase 1",
-          "city": "Pune",
-          "state": "Maharashtra"
-        }
-      }
-    ]
-  }
-  ```
+### A. Geocoding & Reverse Geocoding (Photon)
+Use **Photon** to find coordinates of locations, or get street names from coordinates.
 
-### B. Routing & ETA
-Use **OSRM** to calculate the initial delivery path, distance, and duration (ETA).
+* **Search Geocoding API**: `https://geocode.testifysamples.com/api?q={query}`
+  * *Example*: `curl "https://geocode.testifysamples.com/api?q=Hinjewadi+Phase+1+Pune"`
+* **Reverse Geocoding API**: `https://geocode.testifysamples.com/reverse?lon={lng}&lat={lat}`
+  * *Example*: `curl "https://geocode.testifysamples.com/reverse?lon=73.8567&lat=18.5204"`
 
-* **API Endpoint**: `https://routing.testifysamples.com/route/v1/driving/{restaurant_lng},{restaurant_lat};{customer_lng},{customer_lat}`
-* **Query Parameters**:
-  * `overview=full`: Returns the detailed polyline geometry.
-  * `geometries=geojson`: Returns path in GeoJSON format.
-* **Example Request**:
-  ```bash
-  curl "https://routing.testifysamples.com/route/v1/driving/73.7384,18.5912;73.8567,18.5204?overview=full&geometries=geojson"
-  ```
-* **Response**:
-  ```json
-  {
-    "routes": [
-      {
-        "geometry": {
-          "coordinates": [[73.7384, 18.5912], [73.7410, 18.5890], ..., [73.8567, 18.5204]],
-          "type": "LineString"
-        },
-        "duration": 1420.5,
-        "distance": 18200.3
-      }
-    ]
-  }
-  ```
+### B. Routing & ETA (OSRM)
+Calculate path geometry, total distance, and duration (ETA) for delivery routing.
 
-### C. Snap-to-Road (GPS Correction)
-Raw GPS tracking from mobile phones drifts. To make the rider marker stick smoothly to the street (instead of flying over buildings), pass the rider's recent GPS history to the OSRM **Match API**.
+* **Route API**: `https://routing.testifysamples.com/route/v1/driving/{lng1},{lat1};{lng2},{lat2}`
+  * *Example*: `curl "https://routing.testifysamples.com/route/v1/driving/73.7384,18.5912;73.8567,18.5204?overview=full&geometries=geojson"`
 
-* **API Endpoint**: `https://routing.testifysamples.com/match/v1/driving/{lng1},{lat1};{lng2},{lat2};{lng3},{lat3}`
-* **Example Request**:
-  ```bash
-  curl "https://routing.testifysamples.com/match/v1/driving/73.7380,18.5910;73.7385,18.5915;73.7390,18.5920?geometries=geojson"
-  ```
-* **Response**: Snaps coordinates directly to the street grid, correcting GPS errors.
+### C. Snap-to-Road Map Matching (OSRM)
+Snap raw, noisy mobile GPS coordinate history to the actual road network grid.
+
+* **Match API**: `https://routing.testifysamples.com/match/v1/driving/{lng1},{lat1};{lng2},{lat2};{lng3},{lat3}`
+  * *Example*: `curl "https://routing.testifysamples.com/match/v1/driving/73.7380,18.5910;73.7385,18.5915;73.7390,18.5920?geometries=geojson"`
+
+### D. Distance/Duration Matrix (OSRM)
+Find the distance and time matrices between multiple delivery agents and multiple restaurant pickups. Ideal for finding the closest rider to assign.
+
+* **Table API**: `https://routing.testifysamples.com/table/v1/driving/{rider1_lng},{rider1_lat};{rider2_lng},{rider2_lat};{pickup_lng},{pickup_lat}?sources=0;1&destinations=2`
+  * *Example Request*:
+    ```bash
+    curl "https://routing.testifysamples.com/table/v1/driving/73.738,18.591;73.742,18.585;73.750,18.599?sources=0;1&destinations=2"
+    ```
+  * *Response*: Returns travel durations and distances from each rider (`0`, `1`) to the pickup point (`2`).
+
+### E. Multi-Stop Route Optimization (OSRM)
+Solves the Traveling Salesperson Problem (TSP) for batch deliveries. Optimizes the route sequence for a rider visiting multiple customer drop-offs.
+
+* **Trip API**: `https://routing.testifysamples.com/trip/v1/driving/{pickup_lng},{pickup_lat};{drop1_lng},{drop1_lat};{drop2_lng},{drop2_lat}?source=first`
+  * *Example*: `curl "https://routing.testifysamples.com/trip/v1/driving/73.738,18.591;73.745,18.588;73.752,18.595?source=first&geometries=geojson"`
+
+### F. Nearest Point Snapping (OSRM)
+Snaps a coordinate to the nearest road segment and returns the metadata (name of the street, node ID).
+
+* **Nearest API**: `https://routing.testifysamples.com/nearest/v1/driving/{lng},{lat}`
+  * *Example*: `curl "https://routing.testifysamples.com/nearest/v1/driving/73.738,18.591"`
 
 ---
 
