@@ -1,0 +1,24 @@
+{
+  "name": "@tetsifymaps/core",
+  "version": "1.0.0",
+  "description": "Core routing, geocoding and mapping utilities for self-hosted infrastructure",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "maps",
+    "routing",
+    "geocoding",
+    "osrm",
+    "photon",
+    "maplibre"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}

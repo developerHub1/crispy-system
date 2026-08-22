@@ -1,0 +1,8 @@
+{
+  "name": "tetsify-maps",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "maps": "docker compose -f infra/docker-compose.yml up -d"
+  }
+}
