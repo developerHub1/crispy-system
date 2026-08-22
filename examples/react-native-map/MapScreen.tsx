@@ -114,7 +114,7 @@ export default function MapScreen() {
 
   // Add random stop near current location for routing demonstration
   const addDemoStop = () => {
-    const base = homeLocation || userLocation || [8.5417, 47.3769]; // Default Zurich if no center
+    const base = homeLocation || userLocation || [72.8777, 19.0760]; // Default Mumbai if no center
     
     // Offset stop slightly to simulate a destination (approx 500m - 2km)
     const randomOffsetLng = (Math.random() - 0.5) * 0.02;
@@ -204,7 +204,7 @@ export default function MapScreen() {
           <MapLibreGL.Camera
             ref={cameraRef}
             zoomLevel={12}
-            centerCoordinate={[8.5417, 47.3769]} // Default center: Zurich
+            centerCoordinate={[72.8777, 19.0760]} // Default center: Mumbai
           />
 
           {/* User GPS Location tracking */}
