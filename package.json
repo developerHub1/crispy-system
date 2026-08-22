@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "maps": "docker compose -f infra/docker-compose.yml up -d",
-    "deploy": "bash infra/deploy.sh"
+    "deploy": "bash infra/deploy.sh",
+    "start:nextjs": "cd examples/nextjs-map && npm run dev",
+    "start:expo": "cd examples/expo-map && CI=false npx expo start --tunnel",
+    "start:examples": "npm run start:nextjs & npm run start:expo & wait"
   }
 }
