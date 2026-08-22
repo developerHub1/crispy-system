@@ -14,7 +14,7 @@ interface MapStop {
 export default function MapDashboard() {
   // Connection states (initialized from env or standard defaults)
   const [tileUrl, setTileUrl] = useState(() => 
-    process.env.NEXT_PUBLIC_MAP_TILE_URL || "http://localhost:8080/styles/basic/style.json"
+    process.env.NEXT_PUBLIC_MAP_TILE_URL || "http://localhost:8080/styles/basic-preview/style.json"
   );
   const [geocodeUrl, setGeocodeUrl] = useState(() => 
     process.env.NEXT_PUBLIC_GEOCODE_URL || "http://localhost:2322"
