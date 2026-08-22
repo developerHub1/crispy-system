@@ -17,7 +17,7 @@ import { MapClient, TripResult } from "@tetsifymaps/core";
 // Since we are self-hosting, we don't need a Mapbox API token
 MapLibreGL.setAccessToken(null);
 
-const TILE_STYLE_URL = "https://tiles.testifysamples.com/styles/basic/style.json";
+const TILE_STYLE_URL = "https://tiles.testifysamples.com/styles/basic-preview/style.json";
 const ROUTING_URL = "https://routing.testifysamples.com";
 const GEOCODING_URL = "https://geocode.testifysamples.com";
 
