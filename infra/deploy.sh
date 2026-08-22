@@ -39,6 +39,17 @@ if [ -d "$PERSISTENT_DATA" ]; then
   fi
 fi
 
+# Check if required files are missing, and if so, run the data setup script
+if [ ! -f "$TARGET_DATA/maharashtra.mbtiles" ] || [ ! -f "$TARGET_DATA/maharashtra.osrm.edges" ] || [ ! -d "$TARGET_DATA/photon_data" ] || [ ! -f "$TARGET_DATA/photon-0.4.1.jar" ]; then
+  echo "Required geospatial data files are missing in $TARGET_DATA."
+  echo "Running setup-india.sh to download and prepare the data..."
+  if [ -f infra/setup-india.sh ]; then
+    (cd infra && bash setup-india.sh)
+  else
+    bash setup-india.sh
+  fi
+fi
+
 echo "Deploying TetsifyMaps stack using Cloudflare Tunnel..."
 export TUNNEL_TOKEN="$CF_TOKEN"
 docker compose -f "$COMPOSE_FILE" up

@@ -95,6 +95,15 @@ else
     echo "[Geocoding] Photon index extraction complete!"
 fi
 
+# 5b. Download Photon JAR file if missing
+PHOTON_JAR="${DATA_DIR}/photon-0.4.1.jar"
+if [ -f "${PHOTON_JAR}" ]; then
+    echo "[Geocoding] Photon JAR already exists. Skipping download."
+else
+    echo "[Geocoding] Downloading Photon JAR 0.4.1..."
+    curl -L -o "${PHOTON_JAR}" "https://github.com/komoot/photon/releases/download/0.4.1/photon-0.4.1.jar"
+fi
+
 # 6. Update docker-compose.yml configuration to map new filenames
 echo "[Config] Updating docker-compose.yml filenames for Maharashtra, India..."
 sed -i 's/zurich_switzerland.mbtiles/maharashtra.mbtiles/g' docker-compose.yml
