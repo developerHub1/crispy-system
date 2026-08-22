@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "TetsifyMaps",
+    "slug": "expo-map",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0c10"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.testify.maps",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "TetsifyMaps needs your location to provide routing and address lookup.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TetsifyMaps uses your location for live routing."
+      }
+    },
+    "android": {
+      "package": "com.testify.maps",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0c10"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TetsifyMaps needs your location for routing."
+        }
+      ]
+    ]
+  }
+}

@@ -4,9 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 const UPSTREAM = "https://geocode.testifysamples.com";
 
 // Catch-all: handles /api/geocode/api?q=... (from SDK) and /api/geocode/reverse?...
-export async function GET(request: NextRequest, { params }: { params: { path?: string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const { searchParams } = new URL(request.url);
-  const subPath = (params.path || []).join("/"); // e.g. "api" or "reverse"
+  const { path } = await params;
+  const subPath = (path || []).join("/"); // e.g. "api" or "reverse"
 
   const q = searchParams.get("q") || "";
   const limit = searchParams.get("limit") || "7";
