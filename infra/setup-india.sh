@@ -52,13 +52,13 @@ fi
 OSRM_IMAGE="ghcr.io/project-osrm/osrm-backend:latest"
 OSRM_BASE="${DATA_DIR}/maharashtra.osrm"
 
-if [ -f "${OSRM_BASE}" ]; then
+if [ -f "${OSRM_BASE}.edges" ]; then
     echo "[Routing] Processed OSRM files already exist. Skipping OSRM compilation."
 else
-    echo "[Routing] Processing OSRM routing data for Maharashtra (Car Profile)..."
+    echo "[Routing] Processing OSRM routing data for Maharashtra (Bicycle Profile)..."
     
     echo "  -> Running osrm-extract..."
-    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-extract -p /opt/car.lua /data/maharashtra.osm.pbf
+    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-extract -p /opt/bicycle.lua /data/maharashtra.osm.pbf
     
     echo "  -> Running osrm-partition..."
     docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-partition /data/maharashtra.osrm
