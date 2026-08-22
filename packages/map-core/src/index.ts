@@ -56,6 +56,26 @@ export interface TripResult {
   visitOrder: number[]; // Index array indicating visiting sequence of input coordinates
 }
 
+export interface DeliveryOrder {
+  id: string;
+  pickup: [number, number];  // [lng, lat]
+  dropoff: [number, number]; // [lng, lat]
+}
+
+export interface OptimizedStop {
+  type: "pickup" | "dropoff" | "rider";
+  orderId?: string; // undefined for rider
+  location: [number, number];
+}
+
+export interface OptimizedRouteResult {
+  totalDistanceKm: number;
+  totalDurationMin: number;
+  stops: OptimizedStop[];
+  geometry: RouteGeometry;
+  visitOrder: number[];
+}
+
 /**
  * Format address from Photon Properties
  */
@@ -238,5 +258,152 @@ export class MapClient {
       console.error("OSRM Routing Error:", error);
       throw error;
     }
+  }
+
+  /**
+   * Solves the Pickup and Delivery Problem (PDP) for multiple locations.
+   * Optimizes the sequence of pickup and dropoff points starting from the rider's position,
+   * respecting the constraint that each pickup must occur before its dropoff.
+   * 
+   * @param rider [lng, lat] of the rider starting location
+   * @param orders Array of delivery orders, each with a unique ID, pickup, and dropoff
+   */
+  async optimizeDeliveryRoute(
+    rider: [number, number],
+    orders: DeliveryOrder[]
+  ): Promise<OptimizedRouteResult> {
+    if (orders.length === 0) {
+      throw new Error("At least one order is required to optimize a route.");
+    }
+    if (orders.length > 5) {
+      throw new Error("Optimization is limited to 5 concurrent orders (10 stops) for computational efficiency.");
+    }
+
+    const numOrders = orders.length;
+    
+    // We map nodes to a single flat array:
+    // Index 0: Rider start
+    // Index 1..N: Pickup points
+    // Index N+1..2N: Dropoff points
+    const locations: [number, number][] = [rider];
+    for (let i = 0; i < numOrders; i++) {
+      locations.push(orders[i].pickup);
+    }
+    for (let i = 0; i < numOrders; i++) {
+      locations.push(orders[i].dropoff);
+    }
+
+    const coordString = locations.map(p => `${p[0]},${p[1]}`).join(";");
+    
+    // 1. Get distance and duration matrix using OSRM Table API
+    const tableUrl = `${this.routingUrl}/table/v1/driving/${coordString}?annotations=duration,distance`;
+    
+    let durationMatrix: number[][];
+    let distanceMatrix: number[][];
+    
+    try {
+      const response = await fetch(tableUrl);
+      if (!response.ok) {
+        throw new Error(`OSRM table request failed with status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.code !== "Ok") {
+        throw new Error(`OSRM Table Engine Error: ${data.code}`);
+      }
+      durationMatrix = data.durations;
+      distanceMatrix = data.distances;
+    } catch (error) {
+      console.error("OSRM Table Matrix Error:", error);
+      throw error;
+    }
+
+    // 2. Solve PDP using backtracking search with precedence constraints
+    const numNodes = 2 * numOrders + 1;
+    let bestDuration = Infinity;
+    let bestPath: number[] = [];
+
+    const visited = new Array(numNodes).fill(false);
+    visited[0] = true;
+    const path: number[] = [0];
+
+    const backtrack = (currentNode: number, currentDuration: number) => {
+      if (currentDuration >= bestDuration) {
+        return; // Pruning
+      }
+
+      if (path.length === numNodes) {
+        bestDuration = currentDuration;
+        bestPath = [...path];
+        return;
+      }
+
+      for (let nextNode = 1; nextNode < numNodes; nextNode++) {
+        if (!visited[nextNode]) {
+          // Precedence constraint check:
+          // If nextNode is a dropoff (index > numOrders),
+          // its corresponding pickup (index - numOrders) must be visited first.
+          if (nextNode > numOrders) {
+            const pickupNode = nextNode - numOrders;
+            if (!visited[pickupNode]) {
+              continue; // Dropoff cannot precede pickup
+            }
+          }
+
+          visited[nextNode] = true;
+          path.push(nextNode);
+
+          const travelTime = durationMatrix[currentNode][nextNode];
+          backtrack(nextNode, currentDuration + travelTime);
+
+          path.pop();
+          visited[nextNode] = false;
+        }
+      }
+    };
+
+    backtrack(0, 0);
+
+    // 3. Map the optimal index path back to stop objects
+    const stops: OptimizedStop[] = [];
+    bestPath.forEach(nodeIdx => {
+      if (nodeIdx === 0) {
+        stops.push({
+          type: "rider",
+          location: rider
+        });
+      } else if (nodeIdx <= numOrders) {
+        const orderIdx = nodeIdx - 1;
+        stops.push({
+          type: "pickup",
+          orderId: orders[orderIdx].id,
+          location: orders[orderIdx].pickup
+        });
+      } else {
+        const orderIdx = nodeIdx - numOrders - 1;
+        stops.push({
+          type: "dropoff",
+          orderId: orders[orderIdx].id,
+          location: orders[orderIdx].dropoff
+        });
+      }
+    });
+
+    // Reconstruct distance
+    let totalDistanceMeters = 0;
+    for (let i = 0; i < bestPath.length - 1; i++) {
+      totalDistanceMeters += distanceMatrix[bestPath[i]][bestPath[i + 1]];
+    }
+
+    // 4. Request the actual detailed routing path for the optimized stop sequence
+    const routeCoords = bestPath.map(idx => locations[idx]);
+    const tripDetails = await this.calculateMultiStopTrip(routeCoords, false);
+
+    return {
+      totalDistanceKm: +(totalDistanceMeters / 1000).toFixed(2),
+      totalDurationMin: +(bestDuration / 60).toFixed(1),
+      stops,
+      geometry: tripDetails.geometry,
+      visitOrder: bestPath
+    };
   }
 }

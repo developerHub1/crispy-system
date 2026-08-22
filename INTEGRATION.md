@@ -60,7 +60,49 @@ Solves the Traveling Salesperson Problem (TSP) for batch deliveries. Optimizes t
 * **Trip API**: `https://routing.testifysamples.com/trip/v1/driving/{pickup_lng},{pickup_lat};{drop1_lng},{drop1_lat};{drop2_lng},{drop2_lat}?source=first`
   * *Example*: `curl "https://routing.testifysamples.com/trip/v1/driving/73.738,18.591;73.745,18.588;73.752,18.595?source=first&geometries=geojson"`
 
-### F. Nearest Point Snapping (OSRM)
+### F. Pickup and Delivery Route Optimization (PDP API)
+Solves the Pickup and Delivery Problem (PDP). It takes multiple locations (pickups and drops) and finds the absolute shortest route starting from the rider's position, ensuring that every pickup is visited before its corresponding dropoff.
+
+* **API Endpoint**: `POST /api/optimize` (Exposed by your Next.js application at `http://localhost:3000/api/optimize`)
+* **Request Body**:
+  ```json
+  {
+    "rider": [72.8567, 18.5204],
+    "orders": [
+      {
+        "id": "order-1",
+        "pickup": [73.7384, 18.5912],
+        "dropoff": [73.7452, 18.5880]
+      },
+      {
+        "id": "order-2",
+        "pickup": [73.7501, 18.5991],
+        "dropoff": [73.7622, 18.6010]
+      }
+    ]
+  }
+  ```
+* **Response Body**:
+  ```json
+  {
+    "totalDistanceKm": 25.13,
+    "totalDurationMin": 25.5,
+    "stops": [
+      { "type": "rider", "location": [72.8567, 18.5204] },
+      { "type": "pickup", "orderId": "order-2", "location": [73.7501, 18.5991] },
+      { "type": "pickup", "orderId": "order-1", "location": [73.7384, 18.5912] },
+      { "type": "dropoff", "orderId": "order-1", "location": [73.7452, 18.5880] },
+      { "type": "dropoff", "orderId": "order-2", "location": [73.7622, 18.6010] }
+    ],
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [[72.8567, 18.5204], ...]
+    },
+    "visitOrder": [0, 2, 1, 3, 4]
+  }
+  ```
+
+### G. Nearest Point Snapping (OSRM)
 Snaps a coordinate to the nearest road segment and returns the metadata (name of the street, node ID).
 
 * **Nearest API**: `https://routing.testifysamples.com/nearest/v1/driving/{lng},{lat}`
