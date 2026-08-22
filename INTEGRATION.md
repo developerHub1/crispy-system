@@ -315,7 +315,9 @@ import MapLibreGL from '@maplibre/maplibre-react-native';
 import { MapClient } from '@tetsifymaps/core';
 
 // Disable standard Mapbox API access token for local self-hosted tiles
-MapLibreGL.setAccessToken(null);
+if (typeof MapLibreGL?.setAccessToken === 'function') {
+  MapLibreGL.setAccessToken(null);
+}
 
 const TILE_STYLE_URL = "https://tiles.testifysamples.com/styles/basic-preview/style.json";
 const GEOCODING_URL = "https://geocode.testifysamples.com";
@@ -483,7 +485,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 
-MapLibreGL.setAccessToken(null);
+if (typeof MapLibreGL?.setAccessToken === 'function') {
+  MapLibreGL.setAccessToken(null);
+}
 
 const TILE_STYLE_URL = "https://tiles.testifysamples.com/styles/basic-preview/style.json";
 const ROUTING_URL = "https://routing.testifysamples.com";

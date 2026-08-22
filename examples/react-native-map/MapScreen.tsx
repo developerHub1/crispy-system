@@ -15,7 +15,9 @@ import { MapClient, TripResult } from "@tetsifymaps/core";
 
 // Initialize MapLibre React Native
 // Since we are self-hosting, we don't need a Mapbox API token
-MapLibreGL.setAccessToken(null);
+if (typeof MapLibreGL?.setAccessToken === 'function') {
+  MapLibreGL.setAccessToken(null);
+}
 
 const TILE_STYLE_URL = "https://tiles.testifysamples.com/styles/basic-preview/style.json";
 const ROUTING_URL = "https://routing.testifysamples.com";
@@ -46,7 +48,7 @@ export default function MapScreen() {
   const sdkClientRef = useRef(
     new MapClient({ geocodeUrl: GEOCODING_URL, routingUrl: ROUTING_URL })
   );
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const cameraRef = useRef<any>(null);
 
   // Request Permissions on Mount (Android & iOS)
   useEffect(() => {
@@ -195,7 +197,7 @@ export default function MapScreen() {
         {/* Main Map View */}
         <MapLibreGL.MapView
           style={styles.map}
-          styleURL={styleUrl}
+          mapStyle={styleUrl}
           onLongPress={handleMapLongPress}
           logoEnabled={false}
           attributionEnabled={false}

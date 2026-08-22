@@ -5,8 +5,10 @@
   "scripts": {
     "maps": "docker compose -f infra/docker-compose.yml up -d",
     "deploy": "bash infra/deploy.sh",
+    "deploy:india": "bash infra/deploy-india.sh",
     "start:nextjs": "cd examples/nextjs-map && npm run dev",
-    "start:expo": "cd examples/expo-map && CI=false npx expo start --tunnel",
+    "start:expo": "cd examples/expo-map && CI=false npx expo start",
+    "start:expo:tunnel": "cd examples/expo-map && CI=false npx expo start --tunnel",
     "start:examples": "npm run start:nextjs & npm run start:expo & wait"
   }
 }

@@ -35,7 +35,8 @@
         {
           "locationWhenInUsePermission": "TetsifyMaps needs your location for routing."
         }
-      ]
+      ],
+      "@maplibre/maplibre-react-native"
     ]
   }
 }

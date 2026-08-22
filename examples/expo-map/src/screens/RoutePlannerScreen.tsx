@@ -1,12 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet, View, Text, TextInput, FlatList, TouchableOpacity,
-  Alert, ActivityIndicator, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform
+  Alert, ActivityIndicator, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, NativeModules
 } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
+import * as Location from 'expo-location';
 import { MapClient, formatAddress } from '@tetsifymaps/core';
+import WebViewMap, { MapMarker } from '../components/WebViewMap';
 
-MapLibreGL.setAccessToken(null);
+const hasNativeMap = !!NativeModules.MLRNModule;
+
+if (hasNativeMap && typeof MapLibreGL?.setAccessToken === 'function') {
+  MapLibreGL.setAccessToken(null);
+}
 
 const TILE_STYLE = 'https://tiles.testifysamples.com/styles/basic-preview/style.json';
 const GEOCODE_URL = 'https://geocode.testifysamples.com';
@@ -27,8 +33,53 @@ export default function RoutePlannerScreen() {
   const [routeGeoJson, setRouteGeoJson] = useState<any>(null);
   const [tripSummary, setTripSummary] = useState<{ distance: number; duration: number } | null>(null);
 
+  const [mapCenter, setMapCenter] = useState<[number, number]>([76.0, 19.0]);
+  const [mapZoom, setMapZoom] = useState<number>(7);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+
   const client = useRef(new MapClient({ geocodeUrl: GEOCODE_URL, routingUrl: ROUTING_URL }));
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const cameraRef = useRef<any>(null);
+
+  // Request GPS location on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          const coords: [number, number] = [loc.coords.longitude, loc.coords.latitude];
+          setUserLocation(coords);
+          setMapCenter(coords);
+          setMapZoom(14);
+          cameraRef.current?.setCamera({ centerCoordinate: coords, zoomLevel: 14, animationDuration: 1000 });
+        }
+      } catch (err) {
+        console.warn('GPS location error:', err);
+      }
+    })();
+  }, []);
+
+  const locateUser = async () => {
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'GPS location permission is required.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const coords: [number, number] = [loc.coords.longitude, loc.coords.latitude];
+      setUserLocation(coords);
+      setMapCenter(coords);
+      setMapZoom(15);
+      cameraRef.current?.setCamera({ centerCoordinate: coords, zoomLevel: 15, animationDuration: 800 });
+    } catch (e) {
+      Alert.alert('Location Error', 'Failed to retrieve current GPS position.');
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   // Autocomplete search
   useEffect(() => {
@@ -51,7 +102,10 @@ export default function RoutePlannerScreen() {
     setStops(prev => [...prev, { id: String(Date.now()), name, coords }]);
     setQuery('');
     setResults([]);
-    cameraRef.current?.setCamera({ centerCoordinate: coords, zoomLevel: 13, animationDuration: 800 });
+    // Center & Zoom in close to searched location!
+    setMapCenter(coords);
+    setMapZoom(15);
+    cameraRef.current?.setCamera({ centerCoordinate: coords, zoomLevel: 15, animationDuration: 800 });
   };
 
   const removeStop = (id: string) => {
@@ -94,27 +148,56 @@ export default function RoutePlannerScreen() {
   return (
     <View style={styles.container}>
       {/* Map */}
-      <MapLibreGL.MapView style={styles.map} styleURL={TILE_STYLE} onPress={handleMapPress} logoEnabled={false}>
-        <MapLibreGL.Camera ref={cameraRef} zoomLevel={7} centerCoordinate={[76.0, 19.0]} />
+      {hasNativeMap ? (
+        <MapLibreGL.MapView style={styles.map} mapStyle={TILE_STYLE} onPress={handleMapPress} logoEnabled={false}>
+          <MapLibreGL.Camera ref={cameraRef} zoomLevel={mapZoom} centerCoordinate={mapCenter} />
 
-        {/* Stop markers */}
-        {stops.map((stop, i) => (
-          <MapLibreGL.PointAnnotation key={stop.id} id={stop.id} coordinate={stop.coords}>
-            <View style={[styles.marker, i === 0 && styles.markerStart, i === stops.length - 1 && styles.markerEnd]}>
-              <Text style={styles.markerText}>{i + 1}</Text>
-            </View>
-          </MapLibreGL.PointAnnotation>
-        ))}
+          {/* Stop markers */}
+          {stops.map((stop, i) => (
+            <MapLibreGL.PointAnnotation key={stop.id} id={stop.id} coordinate={stop.coords}>
+              <View style={[styles.marker, i === 0 && styles.markerStart, i === stops.length - 1 && styles.markerEnd]}>
+                <Text style={styles.markerText}>{i + 1}</Text>
+              </View>
+            </MapLibreGL.PointAnnotation>
+          ))}
 
-        {/* Route line */}
-        {routeGeoJson && (
-          <MapLibreGL.ShapeSource id="routeSource" shape={routeGeoJson}>
-            <MapLibreGL.LineLayer id="routeLine" style={{
-              lineColor: '#6366f1', lineWidth: 5, lineCap: 'round', lineJoin: 'round', lineOpacity: 0.85
-            }} />
-          </MapLibreGL.ShapeSource>
+          {/* Route line */}
+          {routeGeoJson && (
+            <MapLibreGL.ShapeSource id="routeSource" shape={routeGeoJson}>
+              <MapLibreGL.LineLayer id="routeLine" style={{
+                lineColor: '#6366f1', lineWidth: 5, lineCap: 'round', lineJoin: 'round', lineOpacity: 0.85
+              }} />
+            </MapLibreGL.ShapeSource>
+          )}
+        </MapLibreGL.MapView>
+      ) : (
+        <WebViewMap
+          style={styles.map}
+          tileStyleUrl={TILE_STYLE}
+          center={mapCenter}
+          zoom={mapZoom}
+          markers={[
+            ...(userLocation ? [{ id: 'userGps', coords: userLocation, color: '#3b82f6', label: '🎯' }] : []),
+            ...stops.map((stop, i): MapMarker => ({
+              id: stop.id,
+              coords: stop.coords,
+              color: i === 0 ? '#10b981' : (i === stops.length - 1 ? '#ef4444' : '#6366f1'),
+              label: String(i + 1),
+            }))
+          ]}
+          routeGeoJson={routeGeoJson}
+          onPress={(coords) => handleMapPress({ geometry: { coordinates: coords } })}
+        />
+      )}
+
+      {/* Floating GPS Button */}
+      <TouchableOpacity style={styles.gpsFab} onPress={locateUser} activeOpacity={0.8}>
+        {isLocating ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.gpsFabIcon}>🎯</Text>
         )}
-      </MapLibreGL.MapView>
+      </TouchableOpacity>
 
       {/* Bottom Panel */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.panel}>
@@ -227,4 +310,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 6,
   },
   calcBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  gpsFab: {
+    position: 'absolute', top: 50, right: 16, width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(15, 23, 42, 0.9)', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, zIndex: 10,
+  },
+  gpsFabIcon: { fontSize: 20 },
 });

@@ -1,13 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
-  Alert, ActivityIndicator, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform
+  Alert, ActivityIndicator, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, NativeModules
 } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { MapClient, formatAddress } from '@tetsifymaps/core';
+import WebViewMap, { MapMarker } from '../components/WebViewMap';
 
-MapLibreGL.setAccessToken(null);
+const hasNativeMap = !!NativeModules.MLRNModule;
+
+if (hasNativeMap && typeof MapLibreGL?.setAccessToken === 'function') {
+  MapLibreGL.setAccessToken(null);
+}
 
 const TILE_STYLE = 'https://tiles.testifysamples.com/styles/basic-preview/style.json';
 const GEOCODE_URL = 'https://geocode.testifysamples.com';
@@ -40,8 +46,53 @@ export default function SaveAddressScreen() {
 
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
 
+  const [mapCenter, setMapCenter] = useState<[number, number]>([76.0, 19.0]);
+  const [mapZoom, setMapZoom] = useState<number>(7);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+
   const client = useRef(new MapClient({ geocodeUrl: GEOCODE_URL }));
-  const cameraRef = useRef<MapLibreGL.Camera>(null);
+  const cameraRef = useRef<any>(null);
+
+  // Request GPS location on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          const coords: [number, number] = [loc.coords.longitude, loc.coords.latitude];
+          setUserLocation(coords);
+          setMapCenter(coords);
+          setMapZoom(14);
+          cameraRef.current?.setCamera({ centerCoordinate: coords, zoomLevel: 14, animationDuration: 1000 });
+        }
+      } catch (err) {
+        console.warn('GPS location error:', err);
+      }
+    })();
+  }, []);
+
+  const locateUser = async () => {
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'GPS location permission is required.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const coords: [number, number] = [loc.coords.longitude, loc.coords.latitude];
+      setUserLocation(coords);
+      setMapCenter(coords);
+      setMapZoom(15);
+      cameraRef.current?.setCamera({ centerCoordinate: coords, zoomLevel: 15, animationDuration: 800 });
+    } catch (e) {
+      Alert.alert('Location Error', 'Failed to retrieve current GPS position.');
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   // Load saved addresses from AsyncStorage
   useEffect(() => {
@@ -74,6 +125,9 @@ export default function SaveAddressScreen() {
     setSelectedName(formatAddress(feature.properties));
     setQuery(feature.properties.name || '');
     setResults([]);
+    // Zoom into searched location
+    setMapCenter(coords);
+    setMapZoom(15);
     cameraRef.current?.setCamera({ centerCoordinate: coords, zoomLevel: 15, animationDuration: 800 });
   };
 
@@ -123,27 +177,51 @@ export default function SaveAddressScreen() {
   return (
     <View style={styles.container}>
       {/* Map */}
-      <MapLibreGL.MapView style={styles.map} styleURL={TILE_STYLE} onPress={handleMapPress} logoEnabled={false}>
-        <MapLibreGL.Camera ref={cameraRef} zoomLevel={7} centerCoordinate={[76.0, 19.0]} />
+      {hasNativeMap ? (
+        <MapLibreGL.MapView style={styles.map} mapStyle={TILE_STYLE} onPress={handleMapPress} logoEnabled={false}>
+          <MapLibreGL.Camera ref={cameraRef} zoomLevel={mapZoom} centerCoordinate={mapCenter} />
 
-        {/* Dropped pin */}
-        {selectedCoords && (
-          <MapLibreGL.PointAnnotation id="selectedPin" coordinate={selectedCoords}>
-            <View style={styles.pinOuter}>
-              <Text style={{ fontSize: 22 }}>📍</Text>
-            </View>
-          </MapLibreGL.PointAnnotation>
+          {/* Dropped pin */}
+          {selectedCoords && (
+            <MapLibreGL.PointAnnotation id="selectedPin" coordinate={selectedCoords}>
+              <View style={styles.pinOuter}>
+                <Text style={{ fontSize: 22 }}>📍</Text>
+              </View>
+            </MapLibreGL.PointAnnotation>
+          )}
+
+          {/* Saved address markers */}
+          {savedAddresses.map(addr => (
+            <MapLibreGL.PointAnnotation key={addr.id} id={addr.id} coordinate={addr.coords}>
+              <View style={styles.savedMarker}>
+                <Text style={{ fontSize: 16 }}>{addr.icon}</Text>
+              </View>
+            </MapLibreGL.PointAnnotation>
+          ))}
+        </MapLibreGL.MapView>
+      ) : (
+        <WebViewMap
+          style={styles.map}
+          tileStyleUrl={TILE_STYLE}
+          center={mapCenter}
+          zoom={mapZoom}
+          markers={[
+            ...(userLocation ? [{ id: 'userGps', coords: userLocation, color: '#3b82f6', label: '🎯' }] : []),
+            ...(selectedCoords ? [{ id: 'selectedPin', coords: selectedCoords, icon: '📍' }] : []),
+            ...savedAddresses.map(a => ({ id: a.id, coords: a.coords, icon: a.icon })),
+          ]}
+          onPress={(coords) => handleMapPress({ geometry: { coordinates: coords } })}
+        />
+      )}
+
+      {/* Floating GPS Button */}
+      <TouchableOpacity style={styles.gpsFab} onPress={locateUser} activeOpacity={0.8}>
+        {isLocating ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.gpsFabIcon}>🎯</Text>
         )}
-
-        {/* Saved address markers */}
-        {savedAddresses.map(addr => (
-          <MapLibreGL.PointAnnotation key={addr.id} id={addr.id} coordinate={addr.coords}>
-            <View style={styles.savedMarker}>
-              <Text style={{ fontSize: 16 }}>{addr.icon}</Text>
-            </View>
-          </MapLibreGL.PointAnnotation>
-        ))}
-      </MapLibreGL.MapView>
+      </TouchableOpacity>
 
       {/* Floating hint */}
       <View style={styles.hintBadge}>
@@ -311,4 +389,11 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 24 },
   emptyText: { color: '#9ca3af', fontSize: 14, fontWeight: '600' },
   emptySubtext: { color: '#6b7280', fontSize: 12, marginTop: 4 },
+  gpsFab: {
+    position: 'absolute', top: 50, right: 16, width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(15, 23, 42, 0.9)', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, zIndex: 10,
+  },
+  gpsFabIcon: { fontSize: 20 },
 });

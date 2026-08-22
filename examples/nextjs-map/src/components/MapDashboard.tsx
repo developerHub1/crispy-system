@@ -29,6 +29,7 @@ export default function MapDashboard() {
   // Map refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const markersRef = useRef<any[]>([]);
   const pinMarkerRef = useRef<any>(null);
 
@@ -45,6 +46,7 @@ export default function MapDashboard() {
   const [tripResult, setTripResult] = useState<TripResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "checking">("checking");
+  const [webglError, setWebglError] = useState<string | null>(null);
 
   // ── Save Address state ──
   const [addrQuery, setAddrQuery] = useState("");
@@ -55,6 +57,17 @@ export default function MapDashboard() {
   const [addrLabel, setAddrLabel] = useState("Home");
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const flyToCoords = (coords: [number, number], zoom = 15) => {
+    if (mapRef.current) {
+      try {
+        mapRef.current.flyTo({ center: coords, zoom, duration: 1800, speed: 1.2, essential: true });
+      } catch {}
+    }
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: "flyTo", center: coords, zoom }, "*");
+    }
+  };
 
   // Check geocoding connection
   const checkConnections = useCallback(async () => {
@@ -69,29 +82,110 @@ export default function MapDashboard() {
 
   useEffect(() => { checkConnections(); }, [checkConnections]);
 
+  // Helper to test WebGL2 support before MapLibre initialization
+  const checkWebGLSupport = (): boolean => {
+    if (typeof window === "undefined") return false;
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl2") || canvas.getContext("experimental-webgl2");
+      return !!gl;
+    } catch {
+      return false;
+    }
+  };
+
+  // Listen for 2D Leaflet iframe map click events
+  useEffect(() => {
+    const handleMessage = async (e: MessageEvent) => {
+      if (e.data?.type === "mapClick") {
+        const { lng, lat } = e.data;
+        const client = sdkClientRef.current;
+        if (activeTabRef.current === "address") {
+          setSelectedCoords([lng, lat]);
+          try {
+            const geo = await client.reverseGeocode(lng, lat);
+            if (geo?.properties) setSelectedAddress(formatAddress(geo.properties));
+            else setSelectedAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          } catch {
+            setSelectedAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          }
+        } else {
+          try {
+            const geo = await client.reverseGeocode(lng, lat);
+            const name = geo?.properties ? formatAddress(geo.properties) : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            setStops(prev => prev.length >= 30 ? prev : [...prev, { id: crypto.randomUUID(), name, coords: [lng, lat] }]);
+          } catch {
+            setStops(prev => [...prev, { id: crypto.randomUUID(), name: `Stop (${lng.toFixed(4)}, ${lat.toFixed(4)})`, coords: [lng, lat] }]);
+          }
+        }
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  // Update Leaflet iframe markers
+  useEffect(() => {
+    if (!webglError || !iframeRef.current?.contentWindow) return;
+    const mapMarkers: Array<{ coords: [number, number]; label?: string; icon?: string }> = [];
+    if (activeTab === "address") {
+      if (selectedCoords) mapMarkers.push({ coords: selectedCoords, icon: "📍" });
+      savedAddresses.forEach(a => mapMarkers.push({ coords: a.coords, icon: a.icon }));
+    } else {
+      stops.forEach((s, i) => mapMarkers.push({ coords: s.coords, label: String(i + 1) }));
+    }
+    iframeRef.current.contentWindow.postMessage({ type: "setMarkers", markers: mapMarkers }, "*");
+  }, [stops, selectedCoords, savedAddresses, activeTab, webglError]);
+
+  // Update Leaflet iframe route line
+  useEffect(() => {
+    if (!webglError || !iframeRef.current?.contentWindow) return;
+    if (tripResult?.geometry?.coordinates) {
+      iframeRef.current.contentWindow.postMessage({ type: "setRoute", routeCoords: tripResult.geometry.coordinates }, "*");
+    } else {
+      iframeRef.current.contentWindow.postMessage({ type: "setRoute", routeCoords: null }, "*");
+    }
+  }, [tripResult, webglError]);
+
   // ── Map init ──
   useEffect(() => {
     if (!mapContainerRef.current) return;
     let maplibre: any;
 
     const initMap = async () => {
-      maplibre = await import("maplibre-gl");
-
-      // MapLibre 6.x: set worker URL explicitly
-      if (maplibre.addProtocol) {
-        // v6 protocol support
+      if (!checkWebGLSupport()) {
+        console.warn("WebGL2 is not supported in this environment. Enabling 2D map fallback.");
+        setWebglError("2D Fallback Active");
+        return;
       }
-      (maplibre as any).setWorkerUrl?.("/maplibre-worker.js");
-
-      if (mapRef.current) { mapRef.current.remove(); }
 
       try {
+        maplibre = await import("maplibre-gl");
+
+        if (typeof maplibre.isSupported === "function" && !maplibre.isSupported()) {
+          console.warn("MapLibre GL is not supported in this browser environment.");
+          setWebglError("2D Fallback Active");
+          return;
+        }
+
+        if (mapRef.current) {
+          try { mapRef.current.remove(); } catch {}
+          mapRef.current = null;
+        }
+
         const map = new maplibre.Map({
           container: mapContainerRef.current!,
           style: TILE_URL,
           center: [76.0, 19.0],
           zoom: 7,
         });
+
+        map.on("error", (e: any) => {
+          if (e?.error?.message?.includes("WebGL") || e?.error?.name === "GPUInitializationError") {
+            setWebglError("2D Fallback Active");
+          }
+        });
+
         map.addControl(new maplibre.NavigationControl(), "top-right");
 
         // Click → add stop (route tab) or drop pin (address tab)
@@ -110,16 +204,16 @@ export default function MapDashboard() {
             }
             // Move pin marker
             if (pinMarkerRef.current) pinMarkerRef.current.setLngLat([lng, lat]);
-            else {
+            else if (mapRef.current) {
               const el = document.createElement("div");
               el.style.cssText = "font-size:32px;cursor:pointer;";
               el.textContent = "📍";
-              pinMarkerRef.current = new maplibre.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+              pinMarkerRef.current = new maplibre.Marker({ element: el }).setLngLat([lng, lat]).addTo(mapRef.current);
             }
           } else {
             try {
               const geo = await client.reverseGeocode(lng, lat);
-              const name = geo?.properties ? formatAddress(geo.properties) : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+              const name = geo?.properties ? formatAddress(geo.properties) : `${lat.toFixed(4)}, ${lat.toFixed(4)}`;
               setStops(prev => prev.length >= 30 ? prev : [...prev, { id: crypto.randomUUID(), name, coords: [lng, lat] }]);
             } catch {
               setStops(prev => [...prev, { id: crypto.randomUUID(), name: `Stop (${lng.toFixed(4)}, ${lat.toFixed(4)})`, coords: [lng, lat] }]);
@@ -127,12 +221,19 @@ export default function MapDashboard() {
           }
         });
         mapRef.current = map;
-      } catch {
-        setErrorMsg("Failed to load map tiles.");
+        setWebglError(null);
+      } catch (err: any) {
+        console.warn("Map initialization error:", err);
+        setWebglError("2D Fallback Active");
       }
     };
     initMap();
-    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+    return () => {
+      if (mapRef.current) {
+        try { mapRef.current.remove(); } catch {}
+        mapRef.current = null;
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [TILE_URL]);
 
@@ -143,22 +244,26 @@ export default function MapDashboard() {
   // ── Stop markers ──
   useEffect(() => {
     if (!mapRef.current) return;
-    markersRef.current.forEach(m => m.remove());
+    markersRef.current.forEach(m => { try { m.remove(); } catch {} });
     markersRef.current = [];
     import("maplibre-gl").then(maplibre => {
-      stops.forEach((stop, i) => {
+      if (!mapRef.current) return;
+      const validStops = stops.filter(s => s && s.coords && Array.isArray(s.coords) && s.coords.length >= 2);
+      validStops.forEach((stop, i) => {
         const el = document.createElement("div");
-        el.className = `custom-marker ${i === 0 ? "custom-marker-first" : i === stops.length - 1 ? "custom-marker-last" : ""}`;
+        el.className = `custom-marker ${i === 0 ? "custom-marker-first" : i === validStops.length - 1 ? "custom-marker-last" : ""}`;
         el.innerHTML = `<div class="custom-marker-inner">${i + 1}</div>`;
         const popup = new maplibre.Popup({ offset: 25 }).setHTML(
-          `<div style="color:black;font-family:sans-serif;font-size:13px"><strong>Stop #${i + 1}</strong><br/>${stop.name}</div>`
+          `<div style="color:black;font-family:sans-serif;font-size:13px"><strong>Stop #${i + 1}</strong><br/>${stop.name || "Stop"}</div>`
         );
         markersRef.current.push(new maplibre.Marker({ element: el }).setLngLat(stop.coords).setPopup(popup).addTo(mapRef.current));
       });
-      if (stops.length > 0) {
-        const bounds = new maplibre.LngLatBounds(stops[0].coords, stops[0].coords);
-        stops.forEach(s => bounds.extend(s.coords));
-        mapRef.current.fitBounds(bounds, { padding: 60, maxZoom: 15 });
+      if (validStops.length > 0 && mapRef.current) {
+        try {
+          const bounds = new maplibre.LngLatBounds(validStops[0].coords, validStops[0].coords);
+          validStops.forEach(s => bounds.extend(s.coords));
+          mapRef.current.fitBounds(bounds, { padding: 60, maxZoom: 15 });
+        } catch {}
       }
     });
   }, [stops]);
@@ -169,7 +274,13 @@ export default function MapDashboard() {
     const t = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const center = mapRef.current ? [mapRef.current.getCenter().lng, mapRef.current.getCenter().lat] as [number, number] : undefined;
+        let center: [number, number] | undefined = undefined;
+        if (mapRef.current) {
+          try {
+            const c = mapRef.current.getCenter();
+            if (c) center = [c.lng, c.lat];
+          } catch {}
+        }
         setSearchResults(await sdkClientRef.current.searchLandmarks(searchQuery, center, 7));
       } catch { /* silent */ } finally { setIsSearching(false); }
     }, 400);
@@ -190,21 +301,24 @@ export default function MapDashboard() {
 
   // ── Handlers ──
   const addStopFromSearch = (feature: PhotonFeature) => {
+    if (!feature?.geometry?.coordinates || !Array.isArray(feature.geometry.coordinates) || feature.geometry.coordinates.length < 2) return;
     const coords = feature.geometry.coordinates as [number, number];
     setStops(prev => [...prev, { id: crypto.randomUUID(), name: formatAddress(feature.properties), coords }]);
     setSearchQuery(""); setSearchResults([]);
-    mapRef.current?.flyTo({ center: coords, zoom: 14 });
+    flyToCoords(coords, 15);
   };
 
   const selectAddrFromSearch = (feature: PhotonFeature) => {
+    if (!feature?.geometry?.coordinates || !Array.isArray(feature.geometry.coordinates) || feature.geometry.coordinates.length < 2) return;
     const coords = feature.geometry.coordinates as [number, number];
     setSelectedCoords(coords);
     setSelectedAddress(formatAddress(feature.properties));
-    setAddrQuery(feature.properties.name || "");
+    setAddrQuery(feature.properties?.name || "");
     setAddrResults([]);
-    mapRef.current?.flyTo({ center: coords, zoom: 15 });
+    flyToCoords(coords, 15);
     // Place pin marker
     import("maplibre-gl").then(maplibre => {
+      if (!mapRef.current) return;
       if (pinMarkerRef.current) pinMarkerRef.current.setLngLat(coords);
       else {
         const el = document.createElement("div");
@@ -235,10 +349,11 @@ export default function MapDashboard() {
   const removeAddress = (id: string) => setSavedAddresses(prev => prev.filter(a => a.id !== id));
 
   const calculateRoute = async () => {
-    if (stops.length < 2) { setErrorMsg("Add at least 2 stops."); return; }
+    const validStops = stops.filter(s => s && s.coords && Array.isArray(s.coords) && s.coords.length >= 2);
+    if (validStops.length < 2) { setErrorMsg("Add at least 2 stops."); return; }
     setIsRouting(true); setErrorMsg(null);
     try {
-      const result = await sdkClientRef.current.calculateMultiStopTrip(stops.map(s => s.coords), optimizeRoute);
+      const result = await sdkClientRef.current.calculateMultiStopTrip(validStops.map(s => s.coords), optimizeRoute);
       setTripResult(result);
       const map = mapRef.current;
       if (map) {
@@ -247,11 +362,18 @@ export default function MapDashboard() {
           map.addSource("route", { type: "geojson", data: result.geometry });
           map.addLayer({ id: "route", type: "line", source: "route", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#6366f1", "line-width": 6, "line-opacity": 0.85 } });
         }
-        const bounds = (await import("maplibre-gl")).LngLatBounds;
-        const b = new bounds(result.geometry.coordinates[0] as any, result.geometry.coordinates[0] as any);
-        (result.geometry.coordinates as any[]).forEach(c => b.extend(c));
-        map.fitBounds(b, { padding: 80, maxZoom: 16 });
-        if (optimizeRoute && result.visitOrder.length === stops.length) setStops(result.visitOrder.map(i => stops[i]));
+        if (result.geometry?.coordinates && Array.isArray(result.geometry.coordinates) && result.geometry.coordinates.length > 0) {
+          const bounds = (await import("maplibre-gl")).LngLatBounds;
+          const firstCoord = result.geometry.coordinates[0];
+          if (firstCoord && Array.isArray(firstCoord) && firstCoord.length >= 2) {
+            const b = new bounds(firstCoord as any, firstCoord as any);
+            (result.geometry.coordinates as any[]).forEach(c => {
+              if (c && Array.isArray(c) && c.length >= 2) b.extend(c as [number, number]);
+            });
+            map.fitBounds(b as any, { padding: 80, maxZoom: 16 });
+          }
+        }
+        if (optimizeRoute && result.visitOrder && result.visitOrder.length === stops.length) setStops(result.visitOrder.map(i => stops[i]));
       }
     } catch (e: any) { setErrorMsg(e.message); }
     finally { setIsRouting(false); }
@@ -269,16 +391,90 @@ export default function MapDashboard() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(async pos => {
       const { longitude: lng, latitude: lat } = pos.coords;
-      mapRef.current?.flyTo({ center: [lng, lat], zoom: 14 });
+      flyToCoords([lng, lat], 15);
       try {
         const geo = await sdkClientRef.current.reverseGeocode(lng, lat);
-        const name = geo?.properties ? formatAddress(geo.properties) : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        const name = geo?.properties ? formatAddress(geo.properties) : `${lat.toFixed(4)}, ${lat.toFixed(4)}`;
         setStops(prev => [{ id: "current-loc", name, coords: [lng, lat] }, ...prev.filter(s => s.id !== "current-loc")]);
       } catch {
         setStops(prev => [{ id: "current-loc", name: `My Location`, coords: [lng, lat] }, ...prev.filter(s => s.id !== "current-loc")]);
       }
     });
   };
+
+  // Auto GPS positioning on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const { longitude: lng, latitude: lat } = pos.coords;
+        flyToCoords([lng, lat], 14);
+      }, () => {}, { timeout: 5000 });
+    }
+  }, []);
+
+  const LEAFLET_HTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0c10; }
+    #map { width: 100%; height: 100%; }
+    .custom-marker {
+      display: flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 14px; color: #fff;
+      font-weight: bold; font-size: 12px; background: #6366f1; border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const map = L.map('map').setView([19.0, 76.0], 7);
+    L.tileLayer('https://tiles.testifysamples.com/styles/basic-preview/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© TetsifyMaps'
+    }).addTo(map);
+
+    let markers = [];
+    let polyline = null;
+
+    map.on('click', (e) => {
+      window.parent.postMessage({ type: 'mapClick', lng: e.latlng.lng, lat: e.latlng.lat }, '*');
+    });
+
+    window.addEventListener('message', (e) => {
+      const data = e.data;
+      if (!data) return;
+      if (data.type === 'flyTo' && data.center) {
+        map.flyTo([data.center[1], data.center[0]], data.zoom || 15, { duration: 1.5 });
+      }
+      if (data.type === 'setMarkers' && data.markers) {
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        data.markers.forEach(m => {
+          const icon = L.divIcon({
+            className: 'custom-marker',
+            html: '<span>' + (m.label || m.icon || '📍') + '</span>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          });
+          const marker = L.marker([m.coords[1], m.coords[0]], { icon }).addTo(map);
+          markers.push(marker);
+        });
+      }
+      if (data.type === 'setRoute' && data.routeCoords) {
+        if (polyline) map.removeLayer(polyline);
+        polyline = L.polyline(data.routeCoords.map(c => [c[1], c[0]]), { color: '#6366f1', weight: 5, opacity: 0.85 }).addTo(map);
+      }
+    });
+  </script>
+</body>
+</html>
+  `;
 
   return (
     <div className="dashboard">
@@ -359,7 +555,7 @@ export default function MapDashboard() {
                       <div className="stop-number">{i + 1}</div>
                       <div className="stop-info">
                         <div className="stop-name">{s.name}</div>
-                        <div className="stop-coords">{s.coords[0].toFixed(5)}, {s.coords[1].toFixed(5)}</div>
+                        <div className="stop-coords">{s.coords && Array.isArray(s.coords) && s.coords.length >= 2 ? `${s.coords[0].toFixed(5)}, ${s.coords[1].toFixed(5)}` : ""}</div>
                       </div>
                       <button onClick={() => setStops(prev => prev.filter(x => x.id !== s.id))} className="remove-stop-btn">✕</button>
                     </div>
@@ -431,7 +627,7 @@ export default function MapDashboard() {
             </div>
 
             {/* Selected address preview + label + save */}
-            {selectedCoords && (
+            {selectedCoords && Array.isArray(selectedCoords) && selectedCoords.length >= 2 && (
               <div className="card" style={{ border: "1px solid rgba(99,102,241,0.25)" }}>
                 <div className="card-title">Confirm Address</div>
                 <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: "8px", padding: "12px", fontSize: "0.85rem" }}>
@@ -474,7 +670,7 @@ export default function MapDashboard() {
                 <div className="stops-list">
                   {savedAddresses.map(addr => (
                     <div key={addr.id} className="stop-item"
-                      onClick={() => mapRef.current?.flyTo({ center: addr.coords, zoom: 15 })}
+                      onClick={() => flyToCoords(addr.coords, 15)}
                       style={{ cursor: "pointer" }}>
                       <div style={{ fontSize: "1.4rem", lineHeight: 1 }}>{addr.icon}</div>
                       <div className="stop-info">
@@ -501,6 +697,14 @@ export default function MapDashboard() {
       {/* Map */}
       <section className="map-container">
         <div ref={mapContainerRef} className="map-wrapper" />
+        {webglError && (
+          <iframe
+            ref={iframeRef}
+            title="2D Interactive Map Fallback"
+            srcDoc={LEAFLET_HTML}
+            style={{ width: "100%", height: "100%", border: "none", position: "absolute", inset: 0, zIndex: 10 }}
+          />
+        )}
         <div className="map-badge">
           <span className={`badge-dot ${connectionStatus !== "connected" ? "badge-dot-offline" : ""}`} />
           {activeTab === "address" ? "Tap map to drop a pin" : "Click map to add stop · Maharashtra"}

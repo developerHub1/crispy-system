@@ -34,14 +34,12 @@ if [ -d "$PERSISTENT_DATA" ]; then
     echo "Found persistent data at $PERSISTENT_DATA. Linking to $TARGET_DATA..."
     rm -rf "$TARGET_DATA"
     ln -s "$PERSISTENT_DATA" "$TARGET_DATA"
-  else
-    echo "Already running from the persistent directory. Skipping link creation."
   fi
 fi
 
-# Check if required files are missing, and if so, run the data setup script
+# Check if Maharashtra required files are missing
 if [ ! -f "$TARGET_DATA/maharashtra.mbtiles" ] || [ ! -f "$TARGET_DATA/maharashtra.osrm.edges" ] || [ ! -d "$TARGET_DATA/photon_data" ] || [ ! -f "$TARGET_DATA/photon-0.4.1.jar" ]; then
-  echo "Required geospatial data files are missing in $TARGET_DATA."
+  echo "Required Maharashtra geospatial data files are missing in $TARGET_DATA."
   echo "Running setup-india.sh to download and prepare the data..."
   if [ -f infra/setup-india.sh ]; then
     (cd infra && bash setup-india.sh)
@@ -50,6 +48,15 @@ if [ ! -f "$TARGET_DATA/maharashtra.mbtiles" ] || [ ! -f "$TARGET_DATA/maharasht
   fi
 fi
 
-echo "Deploying TetsifyMaps stack using Cloudflare Tunnel..."
+# Ensure docker-compose is updated for Maharashtra
+if [ -f infra/docker-compose.yml ]; then
+  sed -i 's/india.mbtiles/maharashtra.mbtiles/g' infra/docker-compose.yml
+  sed -i 's/india.osrm/maharashtra.osrm/g' infra/docker-compose.yml
+else
+  sed -i 's/india.mbtiles/maharashtra.mbtiles/g' docker-compose.yml
+  sed -i 's/india.osrm/maharashtra.osrm/g' docker-compose.yml
+fi
+
+echo "Deploying TetsifyMaps stack for Maharashtra using Cloudflare Tunnel..."
 export TUNNEL_TOKEN="$CF_TOKEN"
-docker compose -f "$COMPOSE_FILE" up
+docker compose -f "$COMPOSE_FILE" up -d
