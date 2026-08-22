@@ -88,7 +88,7 @@ export default function MapDashboard() {
         const map = new maplibre.Map({
           container: mapContainerRef.current!,
           style: tileUrl,
-          center: [72.8777, 19.0760], // Default: Mumbai, India
+          center: [73.8567, 18.5204], // Default: Pune, India
           zoom: 12,
         });
 
@@ -646,7 +646,7 @@ export default function MapDashboard() {
         {/* Dynamic connection indicator badge */}
         <div className="map-badge">
           <span className={`badge-dot ${connectionStatus !== "connected" ? "badge-dot-offline" : ""}`} />
-          TileServer: Basic Vector (Mumbai)
+          TileServer: Basic Vector (Pune)
         </div>
       </section>
     </div>

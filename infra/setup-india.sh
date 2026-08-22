@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Target Region configuration (India / Mumbai Metropolitan Area)
-REGION="Mumbai, India (Cropped from Western Zone)"
+# Target Region configuration (India / Pune Area)
+REGION="Pune, India (Cropped from Western Zone)"
 COUNTRY_CODE="in"
 
 # Define directories
@@ -28,43 +28,43 @@ else
     curl -L -o "${OSM_FILE}" "${OSM_URL}"
 fi
 
-# 2. Crop OSM PBF to Mumbai Metropolitan Region to accelerate build to < 8 mins
-MUMBAI_OSM_FILE="${DATA_DIR}/mumbai.osm.pbf"
-if [ -f "${MUMBAI_OSM_FILE}" ]; then
-    echo "[Data] Cropped Mumbai OSM PBF already exists. Skipping extraction."
+# 2. Crop OSM PBF to Pune Metropolitan Region to accelerate build to < 8 mins
+PUNE_OSM_FILE="${DATA_DIR}/pune.osm.pbf"
+if [ -f "${PUNE_OSM_FILE}" ]; then
+    echo "[Data] Cropped Pune OSM PBF already exists. Skipping extraction."
 else
-    echo "[Data] Extracting Mumbai Metropolitan Region bbox (72.70,18.80,73.15,19.35) using osmium..."
-    docker run --rm -v "$(pwd)/data:/data" danieljh/osmium extract --bbox=72.70,18.80,73.15,19.35 -o /data/mumbai.osm.pbf /data/western-zone-latest.osm.pbf --strategy=complete_ways
-    echo "[Data] Mumbai OSM PBF extracted successfully!"
+    echo "[Data] Extracting Pune Metropolitan Region bbox (73.72,18.42,74.00,18.66) using osmium..."
+    docker run --rm -v "$(pwd)/data:/data" danieljh/osmium extract --bbox=73.72,18.42,74.00,18.66 -o /data/pune.osm.pbf /data/western-zone-latest.osm.pbf --strategy=complete_ways
+    echo "[Data] Pune OSM PBF extracted successfully!"
 fi
 
 # 3. Build TileServer GL Vector Tiles (.mbtiles) using Planetiler container
-TILE_FILE="${DATA_DIR}/mumbai.mbtiles"
+TILE_FILE="${DATA_DIR}/pune.mbtiles"
 if [ -f "${TILE_FILE}" ]; then
-    echo "[Tiles] Mumbai MBTiles already exists. Skipping build."
+    echo "[Tiles] Pune MBTiles already exists. Skipping build."
 else
-    echo "[Tiles] Generating Mumbai MBTiles using Planetiler..."
-    docker run --rm -v "$(pwd)/data:/data" ghcr.io/onthegomap/planetiler:latest --osm_path=/data/mumbai.osm.pbf --output=/data/mumbai.mbtiles --download
+    echo "[Tiles] Generating Pune MBTiles using Planetiler..."
+    docker run --rm -v "$(pwd)/data:/data" ghcr.io/onthegomap/planetiler:latest --osm_path=/data/pune.osm.pbf --output=/data/pune.mbtiles --download
     echo "[Tiles] Vector tiles generated successfully!"
 fi
 
 # 4. Process OSRM Data (Extract, Partition, Customize)
 OSRM_IMAGE="ghcr.io/project-osrm/osrm-backend:latest"
-OSRM_BASE="${DATA_DIR}/mumbai.osrm"
+OSRM_BASE="${DATA_DIR}/pune.osrm"
 
 if [ -f "${OSRM_BASE}" ]; then
     echo "[Routing] Processed OSRM files already exist. Skipping OSRM compilation."
 else
-    echo "[Routing] Processing OSRM routing data for Mumbai (Car Profile)..."
+    echo "[Routing] Processing OSRM routing data for Pune (Car Profile)..."
     
     echo "  -> Running osrm-extract..."
-    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-extract -p /opt/car.lua /data/mumbai.osm.pbf
+    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-extract -p /opt/car.lua /data/pune.osm.pbf
     
     echo "  -> Running osrm-partition..."
-    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-partition /data/mumbai.osrm
+    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-partition /data/pune.osrm
     
     echo "  -> Running osrm-customize..."
-    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-customize /data/mumbai.osrm
+    docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-customize /data/pune.osrm
     
     echo "[Routing] OSRM processing complete!"
 fi
@@ -96,11 +96,13 @@ else
 fi
 
 # 6. Update docker-compose.yml configuration to map new filenames
-echo "[Config] Updating docker-compose.yml filenames for Mumbai, India..."
-sed -i 's/zurich_switzerland.mbtiles/mumbai.mbtiles/g' docker-compose.yml
-sed -i 's/Zurich.osrm/mumbai.osrm/g' docker-compose.yml
-sed -i 's/western-zone.mbtiles/mumbai.mbtiles/g' docker-compose.yml
-sed -i 's/western-zone.osrm/mumbai.osrm/g' docker-compose.yml
+echo "[Config] Updating docker-compose.yml filenames for Pune, India..."
+sed -i 's/zurich_switzerland.mbtiles/pune.mbtiles/g' docker-compose.yml
+sed -i 's/Zurich.osrm/pune.osrm/g' docker-compose.yml
+sed -i 's/western-zone.mbtiles/pune.mbtiles/g' docker-compose.yml
+sed -i 's/western-zone.osrm/pune.osrm/g' docker-compose.yml
+sed -i 's/mumbai.mbtiles/pune.mbtiles/g' docker-compose.yml
+sed -i 's/mumbai.osrm/pune.osrm/g' docker-compose.yml
 
 echo "================================================================="
 echo "Data preparation complete! Run 'npm run maps' to start services."
