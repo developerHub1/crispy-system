@@ -55,7 +55,7 @@ services:
       - ./data/photon-0.4.1.jar:/photon/photon.jar:ro
     ports:
       - "2322:2322"
-    command: ["java", "-Xms1g", "-Xmx4g", "-jar", "/photon/photon.jar", "-data-dir", "/photon", "-listen-ip", "0.0.0.0"]
+    command: ["java", "-Xms1g", "-Xmx4g", "-jar", "/photon/photon.jar", "-data-dir", "/photon", "-listen-ip", "0.0.0.0", "-cors-any"]
     networks:
       - map-network
     healthcheck:
