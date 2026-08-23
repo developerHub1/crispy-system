@@ -39,7 +39,6 @@ else
       --output=/data/india_tmp.mbtiles \
       --download \
       --compress-temp \
-      --free-osm-after-read \
       --free-lake-centerlines-after-read \
       --free-water-polygons-after-read \
       --free-natural-earth-after-read \
@@ -67,6 +66,8 @@ else
     docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-customize /data/india.osrm
     
     echo "[Routing] OSRM processing for Whole India complete!"
+    # Clean up raw OSM PBF file to save disk space
+    rm -f "${OSM_FILE}"
 fi
 
 # 4. Download and Extract India Photon Geocoding Index (745 MB)
