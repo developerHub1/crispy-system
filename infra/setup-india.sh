@@ -48,6 +48,9 @@ else
       --osm_path=/data/maharashtra.osm.pbf \
       --output=/data/maharashtra_tmp.mbtiles \
       --download \
+      --http-timeout=120s \
+      --http-retries=10 \
+      --http-retry-wait=10s \
       --compress-temp \
       --free-lake-centerlines-after-read \
       --free-water-polygons-after-read \

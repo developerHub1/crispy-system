@@ -38,6 +38,9 @@ else
       --osm_path=/data/india-latest.osm.pbf \
       --output=/data/india_tmp.mbtiles \
       --download \
+      --http-timeout=120s \
+      --http-retries=10 \
+      --http-retry-wait=10s \
       --compress-temp \
       --free-lake-centerlines-after-read \
       --free-water-polygons-after-read \
