@@ -46,13 +46,15 @@ else
     echo "[Tiles] Generating Maharashtra MBTiles using Planetiler..."
     docker run --rm -v "$(pwd)/data:/data" ghcr.io/onthegomap/planetiler:latest \
       --osm_path=/data/maharashtra.osm.pbf \
-      --output=/data/maharashtra.mbtiles \
+      --output=/data/maharashtra.mbtiles.tmp \
       --download \
       --compress-temp \
       --free-osm-after-read \
       --free-lake-centerlines-after-read \
       --free-water-polygons-after-read \
-      --free-natural-earth-after-read
+      --free-natural-earth-after-read \
+      --force
+    mv "${DATA_DIR}/maharashtra.mbtiles.tmp" "${TILE_FILE}"
     echo "[Tiles] Vector tiles generated successfully!"
 fi
 
