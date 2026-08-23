@@ -88,11 +88,15 @@ else
 fi
 
 # 5. Update docker-compose.yml configuration to map Whole India filenames
-echo "[Config] Updating docker-compose.yml filenames for Whole India..."
-sed -i 's/maharashtra.mbtiles/india.mbtiles/g' docker-compose.yml
-sed -i 's/maharashtra.osrm/india.osrm/g' docker-compose.yml
-sed -i 's/zurich_switzerland.mbtiles/india.mbtiles/g' docker-compose.yml
-sed -i 's/Zurich.osrm/india.osrm/g' docker-compose.yml
+echo "[Config] Updating docker-compose.yml and docker-compose-arm.yml filenames for Whole India..."
+for compose_file in docker-compose.yml docker-compose-arm.yml; do
+  if [ -f "$compose_file" ]; then
+    sed -i 's/maharashtra.mbtiles/india.mbtiles/g' "$compose_file"
+    sed -i 's/maharashtra.osrm/india.osrm/g' "$compose_file"
+    sed -i 's/zurich_switzerland.mbtiles/india.mbtiles/g' "$compose_file"
+    sed -i 's/Zurich.osrm/india.osrm/g' "$compose_file"
+  fi
+done
 
 echo "================================================================="
 echo "Whole India data preparation complete!"

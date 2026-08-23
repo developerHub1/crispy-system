@@ -105,15 +105,19 @@ else
 fi
 
 # 6. Update docker-compose.yml configuration to map new filenames
-echo "[Config] Updating docker-compose.yml filenames for Maharashtra, India..."
-sed -i 's/zurich_switzerland.mbtiles/maharashtra.mbtiles/g' docker-compose.yml
-sed -i 's/Zurich.osrm/maharashtra.osrm/g' docker-compose.yml
-sed -i 's/western-zone.mbtiles/maharashtra.mbtiles/g' docker-compose.yml
-sed -i 's/western-zone.osrm/maharashtra.osrm/g' docker-compose.yml
-sed -i 's/mumbai.mbtiles/maharashtra.mbtiles/g' docker-compose.yml
-sed -i 's/mumbai.osrm/maharashtra.osrm/g' docker-compose.yml
-sed -i 's/pune.mbtiles/maharashtra.mbtiles/g' docker-compose.yml
-sed -i 's/pune.osrm/maharashtra.osrm/g' docker-compose.yml
+echo "[Config] Updating docker-compose.yml and docker-compose-arm.yml filenames for Maharashtra, India..."
+for compose_file in docker-compose.yml docker-compose-arm.yml; do
+  if [ -f "$compose_file" ]; then
+    sed -i 's/zurich_switzerland.mbtiles/maharashtra.mbtiles/g' "$compose_file"
+    sed -i 's/Zurich.osrm/maharashtra.osrm/g' "$compose_file"
+    sed -i 's/western-zone.mbtiles/maharashtra.mbtiles/g' "$compose_file"
+    sed -i 's/western-zone.osrm/maharashtra.osrm/g' "$compose_file"
+    sed -i 's/mumbai.mbtiles/maharashtra.mbtiles/g' "$compose_file"
+    sed -i 's/mumbai.osrm/maharashtra.osrm/g' "$compose_file"
+    sed -i 's/pune.mbtiles/maharashtra.mbtiles/g' "$compose_file"
+    sed -i 's/pune.osrm/maharashtra.osrm/g' "$compose_file"
+  fi
+done
 
 echo "================================================================="
 echo "Data preparation complete! Run 'npm run maps' to start services."

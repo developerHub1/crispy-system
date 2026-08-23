@@ -1,0 +1,75 @@
+services:
+  # 1. TileServer GL: Serves vector/raster map tiles
+  tileserver:
+    image: maptiler/tileserver-gl:v3.1.1
+    platform: linux/amd64
+    container_name: tileserver
+    restart: unless-stopped
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "8080:8080"
+    command: ["--mbtiles", "/data/maharashtra.mbtiles", "--port", "8080", "--public_url", "https://tiles.testifysamples.com"]
+    networks:
+      - map-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/', (r) => { if (r.statusCode === 200) { process.exit(0); } else { process.exit(1); } }).on('error', (e) => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 2. OSRM Routing Backend: Calculates fast routing, distance matrices, and TSP optimizations
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    container_name: osrm
+    restart: unless-stopped
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "5000:5000"
+    command: osrm-routed --algorithm mld --max-matching-size 100 --max-table-size 100 --max-viaroute-size 100 --max-trip-size 100 /data/maharashtra.osrm
+    networks:
+      - map-network
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 3. Photon Geocoding Engine: Autocomplete, search, and reverse geocoding
+  photon:
+    image: eclipse-temurin:8-jre
+    container_name: photon
+    restart: unless-stopped
+    volumes:
+      - ./data/photon_data:/photon/photon_data
+      - ./data/photon-0.4.1.jar:/photon/photon.jar:ro
+    ports:
+      - "2322:2322"
+    command: ["java", "-Xms1g", "-Xmx4g", "-jar", "/photon/photon.jar", "-data-dir", "/photon", "-listen-ip", "0.0.0.0", "-cors-any"]
+    networks:
+      - map-network
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2322"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  map-network:
+    driver: bridge
