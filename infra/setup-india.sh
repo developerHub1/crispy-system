@@ -44,7 +44,15 @@ if [ -f "${TILE_FILE}" ]; then
     echo "[Tiles] Maharashtra MBTiles already exists. Skipping build."
 else
     echo "[Tiles] Generating Maharashtra MBTiles using Planetiler..."
-    docker run --rm -v "$(pwd)/data:/data" ghcr.io/onthegomap/planetiler:latest --osm_path=/data/maharashtra.osm.pbf --output=/data/maharashtra.mbtiles --download
+    docker run --rm -v "$(pwd)/data:/data" ghcr.io/onthegomap/planetiler:latest \
+      --osm_path=/data/maharashtra.osm.pbf \
+      --output=/data/maharashtra.mbtiles \
+      --download \
+      --compress-temp \
+      --free-osm-after-read \
+      --free-lake-centerlines-after-read \
+      --free-water-polygons-after-read \
+      --free-natural-earth-after-read
     echo "[Tiles] Vector tiles generated successfully!"
 fi
 
