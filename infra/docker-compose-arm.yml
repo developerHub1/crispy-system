@@ -1,8 +1,7 @@
 services:
   # 1. TileServer GL: Serves vector/raster map tiles
   tileserver:
-    image: maptiler/tileserver-gl:v3.1.1
-    platform: linux/amd64
+    image: maptiler/tileserver-gl-light:latest
     container_name: tileserver
     restart: unless-stopped
     volumes:

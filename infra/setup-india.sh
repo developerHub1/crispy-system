@@ -34,7 +34,7 @@ if [ -f "${MAHARASHTRA_OSM_FILE}" ]; then
     echo "[Data] Cropped Maharashtra OSM PBF already exists. Skipping extraction."
 else
     echo "[Data] Extracting Maharashtra Region bbox (72.60,15.60,81.00,22.10) using osmium..."
-    docker run --rm -v "$(pwd)/data:/data" danieljh/osmium extract --bbox=72.60,15.60,81.00,22.10 -o /data/maharashtra.osm.pbf /data/western-zone-latest.osm.pbf --strategy=complete_ways
+    docker run --rm -v "$(pwd)/data:/data" debian:stable-slim sh -c "apt-get update && apt-get install -y osmium-tool && osmium extract --bbox=72.60,15.60,81.00,22.10 -o /data/maharashtra.osm.pbf /data/western-zone-latest.osm.pbf --strategy=complete_ways"
     echo "[Data] Maharashtra OSM PBF extracted successfully!"
 fi
 
