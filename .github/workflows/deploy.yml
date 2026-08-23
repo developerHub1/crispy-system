@@ -33,6 +33,17 @@ jobs:
           echo "Disk space after cleanup:"
           df -h
 
+      - name: Set up Swap Space for OSRM Compilation (16 GB)
+        run: |
+          echo "Creating swap file..."
+          sudo swapoff -a
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "Swap space after setup:"
+          free -h
+
       - name: Set up SSH Key
         run: |
           mkdir -p ~/.ssh
