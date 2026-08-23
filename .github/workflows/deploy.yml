@@ -3,13 +3,21 @@ name: Deploy to Oracle ARM VM
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # Use official GitHub-hosted ARM64 Linux runner (4 vCPU, 16 GB RAM)
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Verify ARM64 Architecture
+        run: |
+          echo "Architecture: $(uname -m)"
+          lscpu
+          free -h
 
       - name: Free Disk Space for Map Building
         run: |
@@ -20,6 +28,7 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf /usr/share/swift
+          sudo rm -rf /var/lib/docker/overlay2 2>/dev/null || true
           echo "Disk space after cleanup:"
           df -h
 
@@ -33,14 +42,14 @@ jobs:
       - name: Run Heavy Geospatial Data Build (Planetiler & OSRM)
         run: |
           mkdir -p infra/data
-          # Run the setup script to download, compile, and prepare all India map data on the runner
+          # Runs natively on ARM64 with 16 GB RAM to prevent memory faults
           cd infra && bash setup-whole-india.sh
 
       - name: Rsync Built Data and Code to Oracle VM
         run: |
-          # Copy the code and compiled maps databases to the Oracle VM
-          # We exclude temp files, node_modules, local env files, and git history
+          # Copy source code and pre-compiled ARM64 map binaries to the Oracle VM
           rsync -avz --progress \
+            -e "ssh -i ~/.ssh/id_rsa" \
             --exclude='.git' \
             --exclude='.env' \
             --exclude='node_modules' \
@@ -51,4 +60,4 @@ jobs:
 
       - name: Start Services on Oracle VM
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd ~/maps && npm install --production && npm run deploy:india:arm"
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd ~/maps && npm install --production && npm run deploy:india:arm"
