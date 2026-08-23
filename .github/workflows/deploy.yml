@@ -8,22 +8,47 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: SSH and Deploy to ARM VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 22
-          script: |
-            # Navigate to maps directory
-            cd ~/maps
-            
-            # Pull latest changes from git
-            git pull
-            
-            # Install any dependency updates
-            npm install --production
-            
-            # Deploy mapping infrastructure (Whole India ARM stack)
-            npm run deploy:india:arm
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space for Map Building
+        run: |
+          echo "Checking initial disk space..."
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf /usr/share/swift
+          echo "Disk space after cleanup:"
+          df -h
+
+      - name: Set up SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run Heavy Geospatial Data Build (Planetiler & OSRM)
+        run: |
+          mkdir -p infra/data
+          # Run the setup script to download, compile, and prepare all India map data on the runner
+          cd infra && bash setup-whole-india.sh
+
+      - name: Rsync Built Data and Code to Oracle VM
+        run: |
+          # Copy the code and compiled maps databases to the Oracle VM
+          # We exclude temp files, node_modules, local env files, and git history
+          rsync -avz --progress \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='node_modules' \
+            --exclude='infra/data/tmp' \
+            --exclude='infra/data/source' \
+            --exclude='examples' \
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/maps/
+
+      - name: Start Services on Oracle VM
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd ~/maps && npm install --production && npm run deploy:india:arm"
