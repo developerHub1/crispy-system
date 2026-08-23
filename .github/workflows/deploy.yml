@@ -33,11 +33,13 @@ jobs:
           echo "Disk space after cleanup:"
           df -h
 
-      - name: Set up Swap Space for OSRM Compilation (16 GB)
+      - name: Set up Swap Space for OSRM Compilation (32 GB)
         run: |
-          echo "Creating swap file..."
+          echo "Configuring kernel to allow large virtual memory allocations..."
+          sudo sysctl vm.overcommit_memory=1
+          echo "Creating 32 GB swap file..."
           sudo swapoff -a
-          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo fallocate -l 32G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=32768
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
