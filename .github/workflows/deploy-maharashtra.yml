@@ -1,0 +1,75 @@
+name: Deploy Maharashtra to Oracle ARM VM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Use official GitHub-hosted ARM64 Linux runner (4 vCPU, 16 GB RAM)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify ARM64 Architecture
+        run: |
+          echo "Architecture: $(uname -m)"
+          lscpu
+          free -h
+
+      - name: Free Disk Space for Map Building
+        run: |
+          echo "Checking initial disk space..."
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf /usr/share/swift
+          # Clean up unused Docker layers safely
+          docker system prune -af
+          echo "Disk space after cleanup:"
+          df -h
+
+      - name: Set up Swap Space for OSRM Compilation (16 GB)
+        run: |
+          echo "Configuring kernel to allow large virtual memory allocations..."
+          sudo sysctl vm.overcommit_memory=1
+          echo "Creating 16 GB swap file..."
+          sudo swapoff -a
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "Swap space after setup:"
+          free -h
+
+      - name: Set up SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run Heavy Geospatial Data Build (Planetiler & OSRM)
+        run: |
+          mkdir -p infra/data
+          # Runs natively on ARM64 with 16 GB RAM to prevent memory faults
+          cd infra && bash setup-india.sh
+
+      - name: Rsync Built Data and Code to Oracle VM
+        run: |
+          # Copy source code and pre-compiled ARM64 map binaries to the Oracle VM
+          rsync -avz --progress \
+            -e "ssh -i ~/.ssh/id_rsa" \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='node_modules' \
+            --exclude='infra/data/tmp' \
+            --exclude='infra/data/source' \
+            --exclude='examples' \
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/maps/
+
+      - name: Start Services on Oracle VM
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd ~/maps && npm install --production && npm run test:arm"
