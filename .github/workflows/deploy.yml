@@ -28,7 +28,8 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf /usr/share/swift
-          sudo rm -rf /var/lib/docker/overlay2 2>/dev/null || true
+          # Clean up unused Docker layers safely
+          docker system prune -af
           echo "Disk space after cleanup:"
           df -h
 
