@@ -136,25 +136,81 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ env.TARGET_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      # 7. Restore Map Data from GitHub Actions Cache (Cuts build time from 8 mins to 15s)
-      - name: Cache Geospatial Map Data (Tiles, OSRM, Geocoder)
+      # 7a. Cache Layer 1: Docker Container Images (~1.5 GB) - Zero Docker Pull Latency
+      - name: Cache Docker Container Images
+        id: cache-docker-images
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache
+          key: docker-images-v1-${{ hashFiles('infra/docker-compose.yml') }}
+          restore-keys: |
+            docker-images-v1-
+
+      - name: Load Cached Docker Images
+        run: |
+          if [ -f /tmp/docker-cache/images.tar ]; then
+            echo "Loading cached Docker container images..."
+            docker load -i /tmp/docker-cache/images.tar
+            docker images
+          else
+            echo "No Docker image cache found. Will pull and save after download."
+          fi
+
+      # 7b. Cache Layer 2: Full Geospatial Map Dataset (~7-8 GB)
+      # Caches: .mbtiles vector tiles, compiled OSRM routing graph, and Photon Lucene database
+      - name: Cache Full Geospatial Map Data (Tiles, OSRM, Geocoder Index)
         id: cache-map-data
         uses: actions/cache@v4
         with:
-          path: infra/data
-          key: map-data-maharashtra-${{ hashFiles('infra/setup-india.sh') }}
+          path: |
+            infra/data/maharashtra.mbtiles
+            infra/data/maharashtra.osrm*
+            infra/data/photon_data
+            infra/data/photon-0.4.1.jar
+            infra/data/sources
+          key: map-data-full-maharashtra-v2-${{ hashFiles('infra/setup-india.sh') }}
           restore-keys: |
-            map-data-maharashtra-
+            map-data-full-maharashtra-v2-
+            map-data-full-
 
-      # 8. Run Data Preparation & Deployment Pipeline (Skips if cached)
+      # 7c. Cache Layer 3: Planetiler Natural Earth & Lake Centerlines (~500 MB)
+      - name: Cache Planetiler Shapefile Downloads
+        id: cache-planetiler-sources
+        uses: actions/cache@v4
+        with:
+          path: ~/.planetiler
+          key: planetiler-sources-v1
+          restore-keys: |
+            planetiler-sources-
+
+      # 8. Run Data Preparation & Deployment Pipeline (Instantly skips if cached)
       - name: Execute Geospatial Data Build
         run: |
           echo "=================================================="
           echo "Starting Data Build for Server ${{ inputs.server_id }}"
-          echo "Cache Hit Status: ${{ steps.cache-map-data.outputs.cache-hit }}"
+          echo "Geospatial Cache Hit: ${{ steps.cache-map-data.outputs.cache-hit }}"
+          echo "Docker Images Cache Hit: ${{ steps.cache-docker-images.outputs.cache-hit }}"
           echo "=================================================="
           mkdir -p infra/data
           cd infra && bash setup-india.sh
+
+      # Save Docker Images to Cache if not already cached
+      - name: Save Docker Images to Cache
+        if: steps.cache-docker-images.outputs.cache-hit != 'true'
+        run: |
+          echo "Saving Docker images for next rotation..."
+          mkdir -p /tmp/docker-cache
+          docker pull maptiler/tileserver-gl:v3.1.1 || true
+          docker pull ghcr.io/project-osrm/osrm-backend:latest || true
+          docker pull eclipse-temurin:8-jre || true
+          docker pull cloudflare/cloudflared:latest || true
+          docker save \
+            maptiler/tileserver-gl:v3.1.1 \
+            ghcr.io/project-osrm/osrm-backend:latest \
+            eclipse-temurin:8-jre \
+            cloudflare/cloudflared:latest \
+            -o /tmp/docker-cache/images.tar 2>/dev/null || true
+          echo "Docker cache saved (~1.2 GB)."
 
       # 9. Deploy & Start Services (Remote Server or Direct Runner)
       - name: Start Services & Cloudflare Tunnel

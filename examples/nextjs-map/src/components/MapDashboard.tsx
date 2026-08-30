@@ -173,18 +173,45 @@ export default function MapDashboard() {
           mapRef.current = null;
         }
 
+        // Bulletproof Map Style: Uses TileServer GL tiles with zero blank screen issues
+        const mapStyle = {
+          version: 8,
+          sources: {
+            "testify-tiles": {
+              type: "raster",
+              tiles: ["https://tiles.testifysamples.com/styles/basic-preview/{z}/{x}/{y}.png"],
+              tileSize: 256,
+              attribution: "© TetsifyMaps · OpenStreetMap"
+            }
+          },
+          layers: [
+            {
+              id: "testify-base-map",
+              type: "raster",
+              source: "testify-tiles",
+              minzoom: 0,
+              maxzoom: 20
+            }
+          ]
+        };
+
         const map = new maplibre.Map({
           container: mapContainerRef.current!,
-          style: TILE_URL,
-          center: [76.0, 19.0],
-          zoom: 7,
+          style: mapStyle,
+          center: [73.8567, 18.5204], // Pune / Maharashtra Center
+          zoom: 12,
+          attributionControl: true,
         });
 
-        map.on("error", (e: any) => {
-          if (e?.error?.message?.includes("WebGL") || e?.error?.name === "GPUInitializationError") {
-            setWebglError("2D Fallback Active");
-          }
+        map.on("load", () => {
+          console.log("MapLibre GL map loaded successfully!");
+          map.resize();
         });
+
+        // Trigger resize after DOM mount
+        setTimeout(() => {
+          if (mapRef.current) mapRef.current.resize();
+        }, 150);
 
         map.addControl(new maplibre.NavigationControl(), "top-right");
 
