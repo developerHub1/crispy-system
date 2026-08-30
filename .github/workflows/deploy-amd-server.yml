@@ -177,6 +177,10 @@ jobs:
             echo "Starting map services and Cloudflare Tunnel directly on the GitHub Actions Runner..."
             export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
             docker compose -f infra/docker-compose.yml up -d
+            echo "Waiting for services to initialize..."
+            sleep 15
+            docker compose -f infra/docker-compose.yml ps
+          fi
       # 10. Automated Geospatial Test Suite (Localhost & Cloudflare Tunnel Verification)
       - name: Run Geospatial Engine & Cloudflare Tunnel Test Suite
         run: |
