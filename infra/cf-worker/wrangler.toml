@@ -1,0 +1,17 @@
+name = "testifymaps-orchestrator"
+main = "worker.js"
+compatibility_date = "2024-04-01"
+
+# Trigger every 3 hours (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC)
+[triggers]
+crons = ["0 */3 * * *"]
+
+[vars]
+GH_OWNER = "developerHub1"
+GH_REPO = "crispy-system"
+GH_BRANCH = "main"
+
+# Optional: KV storage for persistent state tracking across worker restarts
+# [[kv_namespaces]]
+# binding = "STATE_KV"
+# id = "YOUR_KV_NAMESPACE_ID"

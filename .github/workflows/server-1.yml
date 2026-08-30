@@ -1,0 +1,13 @@
+name: "Deploy Server 1 (AMD)"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: "Deploy Server 1"
+    uses: ./.github/workflows/deploy-amd-server.yml
+    with:
+      server_id: "1"
+      trigger_source: "manual-ui-server-1"
+    secrets: inherit

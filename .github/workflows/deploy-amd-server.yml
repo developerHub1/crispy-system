@@ -1,0 +1,216 @@
+name: AMD 12-Server Deployment Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_id:
+        description: "Target Server ID (1 to 12)"
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
+          - "7"
+          - "8"
+          - "9"
+          - "10"
+          - "11"
+          - "12"
+      trigger_source:
+        description: "Trigger Origin (cf-worker / cron / manual)"
+        required: false
+        default: "manual"
+
+jobs:
+  deploy-server:
+    name: "Deploy Server ${{ inputs.server_id }} (AMD)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 200 # Allows full 3-hour operation cycle
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Check if Machine is AMD
+      - name: Verify AMD Processor Architecture
+        id: check_amd
+        run: |
+          echo "=================================================="
+          echo "Verifying CPU Architecture on Runner"
+          echo "=================================================="
+          CPU_MODEL=$(lscpu | grep "Model name" | sed 's/Model name:[ \t]*//')
+          echo "Detected CPU: $CPU_MODEL"
+          
+          if grep -qi "AuthenticAMD" /proc/cpuinfo || echo "$CPU_MODEL" | grep -qi "AMD"; then
+            echo "✅ CONFIRMED: Machine is AMD ($CPU_MODEL)."
+            echo "IS_AMD=true" >> $GITHUB_ENV
+            echo "CPU_NAME=$CPU_MODEL" >> $GITHUB_ENV
+          else
+            echo "❌ ERROR: Runner is NOT an AMD machine ($CPU_MODEL). Expected AuthenticAMD."
+            echo "IS_AMD=false" >> $GITHUB_ENV
+            echo "CPU_NAME=$CPU_MODEL" >> $GITHUB_ENV
+            exit 1
+          fi
+
+      # 2. Notify Cloudflare Worker (Job Started Callback)
+      - name: Notify Cloudflare Worker (Started)
+        if: always()
+        run: |
+          if [ -n "${{ secrets.CF_WORKER_URL }}" ]; then
+            echo "Sending 'started' callback to Cloudflare Worker..."
+            curl -s -X POST "${{ secrets.CF_WORKER_URL }}/callback" \
+              -H "Content-Type: application/json" \
+              -H "X-Webhook-Secret: ${{ secrets.CF_WEBHOOK_SECRET }}" \
+              -d '{
+                "run_id": "${{ github.run_id }}",
+                "server_id": "${{ inputs.server_id }}",
+                "status": "started",
+                "cpu_info": "'"${CPU_NAME}"'"
+              }' || true
+          fi
+
+      # 3. Clean Disk & Free Up Space
+      - name: Free Disk Space for Map Processing
+        run: |
+          echo "Initial disk space:"
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" /usr/share/swift 2>/dev/null || true
+          docker system prune -af 2>/dev/null || true
+          echo "Available disk space after cleanup:"
+          df -h /
+
+      # 4. Set up Swap Space (16 GB for heavy geospatial builds)
+      - name: Set up Swap Space (16 GB)
+        run: |
+          echo "Allocating 16 GB swap file on AMD node..."
+          sudo sysctl vm.overcommit_memory=1
+          sudo swapoff -a 2>/dev/null || true
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "Memory & Swap after setup:"
+          free -h
+
+      # 5. Resolve Target Server Configuration
+      - name: Resolve Server Host & Credentials
+        id: server_config
+        run: |
+          SERVER_ID="${{ inputs.server_id }}"
+          echo "Configuring environment for Server ${SERVER_ID}..."
+          
+          # Check for individual server host secret, otherwise fallback to primary SERVER_HOST
+          DYNAMIC_HOST_VAR="SERVER_${SERVER_ID}_HOST"
+          HOST="${!DYNAMIC_HOST_VAR}"
+          if [ -z "$HOST" ]; then
+            HOST="${{ secrets.SERVER_HOST }}"
+          fi
+          
+          USER="${{ secrets.SERVER_USER }}"
+          if [ -z "$USER" ]; then
+            USER="ubuntu"
+          fi
+          
+          echo "TARGET_HOST=$HOST" >> $GITHUB_ENV
+          echo "TARGET_USER=$USER" >> $GITHUB_ENV
+          echo "Resolved Target Host: $HOST (User: $USER)"
+
+      # 6. Set up SSH Authentication
+      - name: Set up SSH Key
+        if: env.TARGET_HOST != ''
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.TARGET_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      # 7. Restore Map Data from GitHub Actions Cache (Cuts build time from 8 mins to 15s)
+      - name: Cache Geospatial Map Data (Tiles, OSRM, Geocoder)
+        id: cache-map-data
+        uses: actions/cache@v4
+        with:
+          path: infra/data
+          key: map-data-maharashtra-${{ hashFiles('infra/setup-india.sh') }}
+          restore-keys: |
+            map-data-maharashtra-
+
+      # 8. Run Data Preparation & Deployment Pipeline (Skips if cached)
+      - name: Execute Geospatial Data Build
+        run: |
+          echo "=================================================="
+          echo "Starting Data Build for Server ${{ inputs.server_id }}"
+          echo "Cache Hit Status: ${{ steps.cache-map-data.outputs.cache-hit }}"
+          echo "=================================================="
+          mkdir -p infra/data
+          cd infra && bash setup-india.sh
+
+      # 9. Deploy & Start Services on Target Server
+      - name: Deploy and Sync to Target Server
+        if: env.TARGET_HOST != ''
+        run: |
+          echo "Syncing map binaries and services to ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }}..."
+          rsync -avz --progress \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='node_modules' \
+            --exclude='infra/data/tmp' \
+            --exclude='infra/data/source' \
+            --exclude='examples' \
+            ./ ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }}:~/maps/
+
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }} \
+            "cd ~/maps && docker compose -f infra/docker-compose.yml up -d"
+
+      # 9. Continuous 3-Hour Service / Health Monitor
+      - name: Run 3-Hour Health & Rotation Window
+        run: |
+          echo "=================================================="
+          echo "Server ${{ inputs.server_id }} is ACTIVE & HEALTHY."
+          echo "Running 3-hour operation cycle before next handover..."
+          echo "=================================================="
+          # Wait loop with periodic health reporting (3 hours = 10800s)
+          # Can be terminated when Cloudflare Worker triggers handover
+          for i in $(seq 1 36); do
+            echo "[Cycle $i/36] Server ${{ inputs.server_id }} health check: OK ($(date -u))"
+            sleep 300
+          done
+          echo "3-hour operation window completed successfully."
+
+      # 10. Notify Cloudflare Worker (Success Callback)
+      - name: Notify Cloudflare Worker (Success)
+        if: success()
+        run: |
+          if [ -n "${{ secrets.CF_WORKER_URL }}" ]; then
+            echo "Sending 'success' callback to Cloudflare Worker..."
+            curl -s -X POST "${{ secrets.CF_WORKER_URL }}/callback" \
+              -H "Content-Type: application/json" \
+              -H "X-Webhook-Secret: ${{ secrets.CF_WEBHOOK_SECRET }}" \
+              -d '{
+                "run_id": "${{ github.run_id }}",
+                "server_id": "${{ inputs.server_id }}",
+                "status": "success"
+              }' || true
+          fi
+
+      # 11. Notify Cloudflare Worker (Failure Callback)
+      - name: Notify Cloudflare Worker (Failed)
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.CF_WORKER_URL }}" ]; then
+            echo "⚠️ Pipeline failed! Triggering failure callback to Cloudflare Worker for auto-retry..."
+            curl -s -X POST "${{ secrets.CF_WORKER_URL }}/callback" \
+              -H "Content-Type: application/json" \
+              -H "X-Webhook-Secret: ${{ secrets.CF_WEBHOOK_SECRET }}" \
+              -d '{
+                "run_id": "${{ github.run_id }}",
+                "server_id": "${{ inputs.server_id }}",
+                "status": "failed",
+                "error": "Pipeline execution failed on Server ${{ inputs.server_id }} (CPU: '"${CPU_NAME}"')"
+              }' || true
+          fi

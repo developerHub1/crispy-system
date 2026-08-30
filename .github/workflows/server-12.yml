@@ -1,0 +1,13 @@
+name: "Deploy Server 12 (AMD)"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: "Deploy Server 12"
+    uses: ./.github/workflows/deploy-amd-server.yml
+    with:
+      server_id: "12"
+      trigger_source: "manual-ui-server-12"
+    secrets: inherit

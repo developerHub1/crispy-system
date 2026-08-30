@@ -53,8 +53,12 @@ graph TD
 ├── examples/
 │   ├── nextjs-map/            # Interactive Map & Route Planner web application
 │   └── react-native-map/      # React Native Maplibre mobile integration
+├── DEPLOY.md                  # 3-Hour Rotating Multi-Server Orchestrator Guide
 └── README.md                  # System Deployment & Integration Guide
 ```
+
+> [!TIP]
+> For information on the **3-Hour Rotating Multi-Server Orchestrator & Cloudflare Worker**, see [DEPLOY.md](file:///d:/persistent/testifyMaps/DEPLOY.md).
 
 ---
 
