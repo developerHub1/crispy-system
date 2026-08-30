@@ -61,18 +61,25 @@ jobs:
       - name: Notify Cloudflare Worker (Started)
         if: always()
         run: |
-          if [ -n "${{ secrets.CF_WORKER_URL }}" ]; then
-            echo "Sending 'started' callback to Cloudflare Worker..."
-            curl -s -X POST "${{ secrets.CF_WORKER_URL }}/callback" \
-              -H "Content-Type: application/json" \
-              -H "X-Webhook-Secret: ${{ secrets.CF_WEBHOOK_SECRET }}" \
-              -d '{
-                "run_id": "${{ github.run_id }}",
-                "server_id": "${{ inputs.server_id }}",
-                "status": "started",
-                "cpu_info": "'"${CPU_NAME}"'"
-              }' || true
+          CF_URL="${{ secrets.CF_WORKER_URL }}"
+          if [ -z "$CF_URL" ]; then
+            CF_URL="https://weathered-wind-5443.developershub.workers.dev"
           fi
+          CF_SECRET="${{ secrets.CF_WEBHOOK_SECRET }}"
+          if [ -z "$CF_SECRET" ]; then
+            CF_SECRET="TestifyMaps"
+          fi
+          
+          echo "Sending 'started' callback to Cloudflare Worker at $CF_URL..."
+          curl -s -X POST "$CF_URL/callback" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: $CF_SECRET" \
+            -d '{
+              "run_id": "${{ github.run_id }}",
+              "server_id": "${{ inputs.server_id }}",
+              "status": "started",
+              "cpu_info": "'"${CPU_NAME}"'"
+            }' || true
 
       # 3. Clean Disk & Free Up Space
       - name: Free Disk Space for Map Processing
@@ -186,31 +193,45 @@ jobs:
       - name: Notify Cloudflare Worker (Success)
         if: success()
         run: |
-          if [ -n "${{ secrets.CF_WORKER_URL }}" ]; then
-            echo "Sending 'success' callback to Cloudflare Worker..."
-            curl -s -X POST "${{ secrets.CF_WORKER_URL }}/callback" \
-              -H "Content-Type: application/json" \
-              -H "X-Webhook-Secret: ${{ secrets.CF_WEBHOOK_SECRET }}" \
-              -d '{
-                "run_id": "${{ github.run_id }}",
-                "server_id": "${{ inputs.server_id }}",
-                "status": "success"
-              }' || true
+          CF_URL="${{ secrets.CF_WORKER_URL }}"
+          if [ -z "$CF_URL" ]; then
+            CF_URL="https://weathered-wind-5443.developershub.workers.dev"
           fi
+          CF_SECRET="${{ secrets.CF_WEBHOOK_SECRET }}"
+          if [ -z "$CF_SECRET" ]; then
+            CF_SECRET="TestifyMaps"
+          fi
+          
+          echo "Sending 'success' callback to Cloudflare Worker at $CF_URL..."
+          curl -s -X POST "$CF_URL/callback" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: $CF_SECRET" \
+            -d '{
+              "run_id": "${{ github.run_id }}",
+              "server_id": "${{ inputs.server_id }}",
+              "status": "success"
+            }' || true
 
       # 11. Notify Cloudflare Worker (Failure Callback)
       - name: Notify Cloudflare Worker (Failed)
         if: failure()
         run: |
-          if [ -n "${{ secrets.CF_WORKER_URL }}" ]; then
-            echo "⚠️ Pipeline failed! Triggering failure callback to Cloudflare Worker for auto-retry..."
-            curl -s -X POST "${{ secrets.CF_WORKER_URL }}/callback" \
-              -H "Content-Type: application/json" \
-              -H "X-Webhook-Secret: ${{ secrets.CF_WEBHOOK_SECRET }}" \
-              -d '{
-                "run_id": "${{ github.run_id }}",
-                "server_id": "${{ inputs.server_id }}",
-                "status": "failed",
-                "error": "Pipeline execution failed on Server ${{ inputs.server_id }} (CPU: '"${CPU_NAME}"')"
-              }' || true
+          CF_URL="${{ secrets.CF_WORKER_URL }}"
+          if [ -z "$CF_URL" ]; then
+            CF_URL="https://weathered-wind-5443.developershub.workers.dev"
           fi
+          CF_SECRET="${{ secrets.CF_WEBHOOK_SECRET }}"
+          if [ -z "$CF_SECRET" ]; then
+            CF_SECRET="TestifyMaps"
+          fi
+          
+          echo "⚠️ Pipeline failed! Triggering failure callback to Cloudflare Worker at $CF_URL for auto-retry..."
+          curl -s -X POST "$CF_URL/callback" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: $CF_SECRET" \
+            -d '{
+              "run_id": "${{ github.run_id }}",
+              "server_id": "${{ inputs.server_id }}",
+              "status": "failed",
+              "error": "Pipeline execution failed on Server ${{ inputs.server_id }} (CPU: '"${CPU_NAME}"')"
+            }' || true
