@@ -156,35 +156,51 @@ jobs:
           mkdir -p infra/data
           cd infra && bash setup-india.sh
 
-      # 9. Deploy & Start Services on Target Server
-      - name: Deploy and Sync to Target Server
-        if: env.TARGET_HOST != ''
+      # 9. Deploy & Start Services (Remote Server or Direct Runner)
+      - name: Start Services & Cloudflare Tunnel
         run: |
-          echo "Syncing map binaries and services to ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }}..."
-          rsync -avz --progress \
-            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-            --exclude='.git' \
-            --exclude='.env' \
-            --exclude='node_modules' \
-            --exclude='infra/data/tmp' \
-            --exclude='infra/data/source' \
-            --exclude='examples' \
-            ./ ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }}:~/maps/
+          if [ -n "${{ env.TARGET_HOST }}" ]; then
+            echo "Syncing map binaries and services to ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }}..."
+            rsync -avz --progress \
+              -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+              --exclude='.git' \
+              --exclude='.env' \
+              --exclude='node_modules' \
+              --exclude='infra/data/tmp' \
+              --exclude='infra/data/source' \
+              --exclude='examples' \
+              ./ ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }}:~/maps/
 
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }} \
-            "cd ~/maps && docker compose -f infra/docker-compose.yml up -d"
+            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ env.TARGET_USER }}@${{ env.TARGET_HOST }} \
+              "cd ~/maps && echo 'TUNNEL_TOKEN=${{ secrets.TUNNEL_TOKEN }}' > infra/.env && docker compose -f infra/docker-compose.yml up -d"
+          else
+            echo "Starting map services and Cloudflare Tunnel directly on the GitHub Actions Runner..."
+            export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
+            docker compose -f infra/docker-compose.yml up -d
+            echo "Waiting for services to initialize..."
+            sleep 15
+            docker compose -f infra/docker-compose.yml ps
+          fi
 
-      # 9. Continuous 3-Hour Service / Health Monitor
+      # 10. Continuous 3-Hour Service / Health Monitor
       - name: Run 3-Hour Health & Rotation Window
         run: |
           echo "=================================================="
           echo "Server ${{ inputs.server_id }} is ACTIVE & HEALTHY."
+          echo "Cloudflare Tunnel routing active for public access."
           echo "Running 3-hour operation cycle before next handover..."
           echo "=================================================="
-          # Wait loop with periodic health reporting (3 hours = 10800s)
-          # Can be terminated when Cloudflare Worker triggers handover
+          # Health check loop every 5 minutes (36 cycles = 3 hours)
           for i in $(seq 1 36); do
-            echo "[Cycle $i/36] Server ${{ inputs.server_id }} health check: OK ($(date -u))"
+            echo "[Cycle $i/36] $(date -u) - Verifying map container health..."
+            if [ -z "${{ env.TARGET_HOST }}" ]; then
+              # Local container health ping
+              curl -s -o /dev/null -w "TileServer: %{http_code} | " http://127.0.0.1:8080/ || true
+              curl -s -o /dev/null -w "OSRM: %{http_code} | " http://127.0.0.1:5000/ || true
+              curl -s -o /dev/null -w "Photon: %{http_code}\n" http://127.0.0.1:2322/api?q=mumbai || true
+            else
+              echo "Remote Server ${{ env.TARGET_HOST }} active."
+            fi
             sleep 300
           done
           echo "3-hour operation window completed successfully."

@@ -89,11 +89,12 @@ sequenceDiagram
 
 | Secret Name | Description | Example / Value |
 | :--- | :--- | :--- |
-| `CF_WORKER_URL` | Public URL of your deployed Cloudflare Worker | `https://testifymaps-orchestrator.your-account.workers.dev` |
-| `CF_WEBHOOK_SECRET` | Shared secret token to authenticate webhook calls | `cf_secret_abcdef1234567890` |
-| `SERVER_SSH_KEY` | Private SSH key used to access deployment servers | `-----BEGIN OPENSSH PRIVATE KEY----- ...` |
-| `SERVER_HOST` | Default fallback server hostname or IP | `192.0.2.1` |
-| `SERVER_USER` | SSH username on target servers | `ubuntu` |
+| `TUNNEL_TOKEN` | **Cloudflare Tunnel Token** (connects container to Cloudflare for zero-port HTTPS routing) | `eyJhIjoiY2...` |
+| `CF_WORKER_URL` | Public URL of your deployed Cloudflare Worker | `https://weathered-wind-5443.developershub.workers.dev` |
+| `CF_WEBHOOK_SECRET` | Shared secret token to authenticate webhook calls | `TestifyMaps` |
+| `SERVER_SSH_KEY` | *(Optional)* Private SSH key for remote VPS deployments | `-----BEGIN OPENSSH PRIVATE KEY----- ...` |
+| `SERVER_HOST` | *(Optional)* Default fallback remote server IP | `192.0.2.1` |
+| `SERVER_USER` | *(Optional)* SSH username on remote server | `ubuntu` |
 | `SERVER_1_HOST` ... `SERVER_12_HOST` | *(Optional)* Individual IP addresses for each of the 12 servers | `10.0.0.1`, `10.0.0.2`, ... |
 
 ---
