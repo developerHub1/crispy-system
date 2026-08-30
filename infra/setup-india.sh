@@ -17,28 +17,20 @@ echo "================================================================="
 mkdir -p "${DATA_DIR}"
 mkdir -p "${PHOTON_DIR}"
 
-# 1. Download OSM PBF for Western Zone (209 MB)
-OSM_URL="https://download.geofabrik.de/asia/india/western-zone-latest.osm.pbf"
-OSM_FILE="${DATA_DIR}/western-zone-latest.osm.pbf"
-
-if [ -f "${OSM_FILE}" ]; then
-    echo "[Data] Western Zone OSM PBF already exists. Skipping download."
-else
-    echo "[Data] Downloading Western Zone OSM PBF (~209 MB)..."
-    curl -L -o "${OSM_FILE}" "${OSM_URL}"
-fi
-
-# 2. Crop OSM PBF to Maharashtra Region
+# 1. Download Direct Maharashtra OSM PBF (~164 MB)
 MAHARASHTRA_OSM_FILE="${DATA_DIR}/maharashtra.osm.pbf"
-if [ -f "${MAHARASHTRA_OSM_FILE}" ]; then
-    echo "[Data] Cropped Maharashtra OSM PBF already exists. Skipping extraction."
+OSM_URL="https://download.openstreetmap.fr/extracts/asia/india/maharashtra-latest.osm.pbf"
+
+if [ -f "${MAHARASHTRA_OSM_FILE}" ] && [ $(stat -c%s "${MAHARASHTRA_OSM_FILE}" 2>/dev/null || stat -f%z "${MAHARASHTRA_OSM_FILE}" 2>/dev/null || echo 0) -gt 10000000 ]; then
+    echo "[Data] Maharashtra OSM PBF already exists and is valid. Skipping download."
 else
-    echo "[Data] Extracting Maharashtra Region bbox (72.60,15.60,81.00,22.10) using osmium..."
-    docker run --rm -v "$(pwd)/data:/data" debian:stable-slim sh -c "apt-get update && apt-get install -y osmium-tool && osmium extract --bbox=72.60,15.60,81.00,22.10 -o /data/maharashtra.osm.pbf /data/western-zone-latest.osm.pbf --strategy=complete_ways"
-    echo "[Data] Maharashtra OSM PBF extracted successfully!"
+    echo "[Data] Downloading Maharashtra OSM PBF directly from OSM France mirror (~164 MB)..."
+    rm -f "${MAHARASHTRA_OSM_FILE}"
+    curl -f -sSL --retry 3 --retry-delay 5 -o "${MAHARASHTRA_OSM_FILE}" "${OSM_URL}"
+    echo "[Data] Maharashtra OSM PBF downloaded successfully!"
 fi
 
-# 3. Build TileServer GL Vector Tiles (.mbtiles) using Planetiler container
+# 2. Build TileServer GL Vector Tiles (.mbtiles) using Planetiler container
 TILE_FILE="${DATA_DIR}/maharashtra.mbtiles"
 if [ -f "${TILE_FILE}" ]; then
     echo "[Tiles] Maharashtra MBTiles already exists. Skipping build."
@@ -79,9 +71,8 @@ else
     docker run --rm -v "$(pwd)/data:/data" "${OSRM_IMAGE}" osrm-customize /data/maharashtra.osrm
     
     echo "[Routing] OSRM processing complete!"
-    # Clean up raw OSM PBF files to save disk space
+    # Clean up raw OSM PBF file to save disk space
     rm -f "${MAHARASHTRA_OSM_FILE}"
-    rm -f "${OSM_FILE}"
 fi
 
 # 5. Download and Extract India Photon Geocoding Index (745 MB)
