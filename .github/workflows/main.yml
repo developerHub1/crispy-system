@@ -1,0 +1,32 @@
+name: CI Pipeline
+
+# 1. Triggers (When to run)
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Allows manual run from GitHub UI
+
+# 2. Jobs (What to execute)
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step A: Clone the repo code onto the runner
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      # Step B: Set up runtime (e.g., Node.js, Python, Java)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Step C: Install dependencies and run tests/build
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
