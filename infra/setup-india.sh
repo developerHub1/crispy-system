@@ -32,6 +32,19 @@ fi
 
 # 2. Build TileServer GL Vector Tiles (.mbtiles) using Planetiler container
 TILE_FILE="${DATA_DIR}/maharashtra.mbtiles"
+SOURCES_DIR="${DATA_DIR}/sources"
+mkdir -p "${SOURCES_DIR}"
+
+WATER_POLYGONS_FILE="${SOURCES_DIR}/water-polygons-split-3857.zip"
+WATER_POLYGONS_URL="https://www.osmdata.org/download/water-polygons-split-3857.zip"
+
+if [ -f "${WATER_POLYGONS_FILE}" ] && [ $(stat -c%s "${WATER_POLYGONS_FILE}" 2>/dev/null || stat -f%z "${WATER_POLYGONS_FILE}" 2>/dev/null || echo 0) -gt 500000000 ]; then
+    echo "[Tiles] Water polygons already exist in sources. Skipping download."
+else
+    echo "[Tiles] Downloading water polygons from reliable mirror (osmdata.org)..."
+    curl -f -L -C - --retry 5 --retry-delay 5 -o "${WATER_POLYGONS_FILE}" "${WATER_POLYGONS_URL}"
+fi
+
 if [ -f "${TILE_FILE}" ]; then
     echo "[Tiles] Maharashtra MBTiles already exists. Skipping build."
 else
@@ -40,6 +53,9 @@ else
       --osm_path=/data/maharashtra.osm.pbf \
       --output=/data/maharashtra_tmp.mbtiles \
       --download \
+      --water-polygons-path=/data/sources/water-polygons-split-3857.zip \
+      --water-polygons-url="${WATER_POLYGONS_URL}" \
+      --bounds=72.5,15.6,80.9,22.1 \
       --http-timeout=120s \
       --http-retries=10 \
       --http-retry-wait=10s \
