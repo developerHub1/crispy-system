@@ -174,26 +174,28 @@ export default function MapDashboard() {
         }
 
         // Bulletproof Map Style: Uses TileServer GL tiles with zero blank screen issues
-        const mapStyle = {
-          version: 8,
-          sources: {
-            "testify-tiles": {
-              type: "raster",
-              tiles: ["https://tiles.testifysamples.com/styles/basic-preview/{z}/{x}/{y}.png"],
-              tileSize: 256,
-              attribution: "© TetsifyMaps · OpenStreetMap"
-            }
-          },
-          layers: [
-            {
-              id: "testify-base-map",
-              type: "raster",
-              source: "testify-tiles",
-              minzoom: 0,
-              maxzoom: 20
-            }
-          ]
-        };
+        const mapStyle: any = TILE_URL.endsWith(".json")
+          ? TILE_URL
+          : {
+              version: 8,
+              sources: {
+                "testify-tiles": {
+                  type: "raster",
+                  tiles: [TILE_URL.includes("{z}") ? TILE_URL : "https://tiles.testifysamples.com/styles/basic-preview/{z}/{x}/{y}.png"],
+                  tileSize: 256,
+                  attribution: "© TetsifyMaps · OpenStreetMap"
+                }
+              },
+              layers: [
+                {
+                  id: "testify-base-map",
+                  type: "raster",
+                  source: "testify-tiles",
+                  minzoom: 0,
+                  maxzoom: 20
+                }
+              ]
+            };
 
         const map = new maplibre.Map({
           container: mapContainerRef.current!,
@@ -240,7 +242,7 @@ export default function MapDashboard() {
           } else {
             try {
               const geo = await client.reverseGeocode(lng, lat);
-              const name = geo?.properties ? formatAddress(geo.properties) : `${lat.toFixed(4)}, ${lat.toFixed(4)}`;
+              const name = geo?.properties ? formatAddress(geo.properties) : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
               setStops(prev => prev.length >= 30 ? prev : [...prev, { id: crypto.randomUUID(), name, coords: [lng, lat] }]);
             } catch {
               setStops(prev => [...prev, { id: crypto.randomUUID(), name: `Stop (${lng.toFixed(4)}, ${lat.toFixed(4)})`, coords: [lng, lat] }]);

@@ -33,15 +33,8 @@ TILE_FILE="${DATA_DIR}/india.mbtiles"
 SOURCES_DIR="${DATA_DIR}/sources"
 mkdir -p "${SOURCES_DIR}"
 
-WATER_POLYGONS_FILE="${SOURCES_DIR}/water-polygons-split-3857.zip"
-WATER_POLYGONS_URL="https://www.osmdata.org/download/water-polygons-split-3857.zip"
-
-if [ -f "${WATER_POLYGONS_FILE}" ] && [ $(stat -c%s "${WATER_POLYGONS_FILE}" 2>/dev/null || stat -f%z "${WATER_POLYGONS_FILE}" 2>/dev/null || echo 0) -gt 500000000 ]; then
-    echo "[Tiles] Water polygons already exist in sources. Skipping download."
-else
-    echo "[Tiles] Downloading water polygons from reliable mirror (osmdata.org)..."
-    curl -f -L -C - --retry 5 --retry-delay 5 -o "${WATER_POLYGONS_FILE}" "${WATER_POLYGONS_URL}"
-fi
+# Clean up obsolete shapefile zip if present to reclaim runner disk space
+rm -f "${SOURCES_DIR}/water-polygons-split-3857.zip"
 
 if [ -f "${TILE_FILE}" ]; then
     echo "[Tiles] Whole India MBTiles already exists. Skipping build."
@@ -51,15 +44,16 @@ else
       --osm_path=/data/india-latest.osm.pbf \
       --output=/data/india_tmp.mbtiles \
       --download \
-      --water-polygons-path=/data/sources/water-polygons-split-3857.zip \
-      --water-polygons-url="${WATER_POLYGONS_URL}" \
+      --download-dir=/data/sources \
       --bounds=68.1,6.5,97.4,35.5 \
+      --languages=default,mr \
+      --transliterate \
+      --transportation-z13-paths=true \
+      --building-merge-z13=true \
       --http-timeout=120s \
       --http-retries=10 \
       --http-retry-wait=10s \
       --compress-temp \
-      --free-lake-centerlines-after-read \
-      --free-water-polygons-after-read \
       --free-natural-earth-after-read \
       --force
     mv "${DATA_DIR}/india_tmp.mbtiles" "${TILE_FILE}"

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "maps": "docker compose -f infra/docker-compose.yml up -d",
+    "test": "npm run --prefix packages/map-core build",
     "deploy": "bash infra/deploy.sh",
     "deploy:india": "bash infra/deploy-india.sh",
     "deploy:india:arm": "bash infra/deploy-india-arm.sh",

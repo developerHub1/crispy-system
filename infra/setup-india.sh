@@ -35,15 +35,8 @@ TILE_FILE="${DATA_DIR}/maharashtra.mbtiles"
 SOURCES_DIR="${DATA_DIR}/sources"
 mkdir -p "${SOURCES_DIR}"
 
-WATER_POLYGONS_FILE="${SOURCES_DIR}/water-polygons-split-3857.zip"
-WATER_POLYGONS_URL="https://www.osmdata.org/download/water-polygons-split-3857.zip"
-
-if [ -f "${WATER_POLYGONS_FILE}" ] && [ $(stat -c%s "${WATER_POLYGONS_FILE}" 2>/dev/null || stat -f%z "${WATER_POLYGONS_FILE}" 2>/dev/null || echo 0) -gt 500000000 ]; then
-    echo "[Tiles] Water polygons already exist in sources. Skipping download."
-else
-    echo "[Tiles] Downloading water polygons from reliable mirror (osmdata.org)..."
-    curl -f -L -C - --retry 5 --retry-delay 5 -o "${WATER_POLYGONS_FILE}" "${WATER_POLYGONS_URL}"
-fi
+# Clean up obsolete shapefile zip if present to reclaim runner disk space
+rm -f "${SOURCES_DIR}/water-polygons-split-3857.zip"
 
 if [ -f "${TILE_FILE}" ]; then
     echo "[Tiles] Maharashtra MBTiles already exists. Skipping build."
@@ -53,15 +46,16 @@ else
       --osm_path=/data/maharashtra.osm.pbf \
       --output=/data/maharashtra_tmp.mbtiles \
       --download \
-      --water-polygons-path=/data/sources/water-polygons-split-3857.zip \
-      --water-polygons-url="${WATER_POLYGONS_URL}" \
-      --bounds=72.5,15.6,80.9,22.1 \
+      --download-dir=/data/sources \
+      --bounds=72.0,15.5,81.0,22.2 \
+      --languages=default,mr \
+      --transliterate \
+      --transportation-z13-paths=true \
+      --building-merge-z13=true \
       --http-timeout=120s \
       --http-retries=10 \
       --http-retry-wait=10s \
       --compress-temp \
-      --free-lake-centerlines-after-read \
-      --free-water-polygons-after-read \
       --free-natural-earth-after-read \
       --force
     mv "${DATA_DIR}/maharashtra_tmp.mbtiles" "${TILE_FILE}"
@@ -130,6 +124,8 @@ fi
 echo "[Config] Updating docker-compose.yml and docker-compose-arm.yml filenames for Maharashtra, India..."
 for compose_file in docker-compose.yml docker-compose-arm.yml; do
   if [ -f "$compose_file" ]; then
+    sed -i 's/india.mbtiles/maharashtra.mbtiles/g' "$compose_file"
+    sed -i 's/india.osrm/maharashtra.osrm/g' "$compose_file"
     sed -i 's/zurich_switzerland.mbtiles/maharashtra.mbtiles/g' "$compose_file"
     sed -i 's/Zurich.osrm/maharashtra.osrm/g' "$compose_file"
     sed -i 's/western-zone.mbtiles/maharashtra.mbtiles/g' "$compose_file"
